@@ -26,13 +26,27 @@ const DragBoundingBox = ({ onDrawComplete }) => {
     },
     mousemove(e) {
       if (startPoint) {
-        setCurrentBounds([startPoint, e.latlng]);
+        let lat = e.latlng.lat;
+        let lng = e.latlng.lng;
+        
+        // Hard limit to ~10km (0.1 degrees)
+        const maxDiff = 0.1;
+        if (Math.abs(lat - startPoint.lat) > maxDiff) {
+          lat = startPoint.lat + (Math.sign(lat - startPoint.lat) * maxDiff);
+        }
+        if (Math.abs(lng - startPoint.lng) > maxDiff) {
+          lng = startPoint.lng + (Math.sign(lng - startPoint.lng) * maxDiff);
+        }
+        
+        const constrainedLatLng = L.latLng(lat, lng);
+        setCurrentBounds([startPoint, constrainedLatLng]);
       }
     },
     mouseup(e) {
-      if (startPoint) {
+      if (startPoint && currentBounds) {
         map.dragging.enable();
-        const bounds = L.latLngBounds(startPoint, e.latlng);
+        // Use the constrained bounds rather than where the mouse physically ended up
+        const bounds = L.latLngBounds(currentBounds[0], currentBounds[1]);
         
         // Convert to [lon_min, lat_min, lon_max, lat_max]
         const bbox = [
@@ -57,15 +71,15 @@ const DragBoundingBox = ({ onDrawComplete }) => {
   ) : null;
 };
 
-const MapViewer = ({ bounds, onDrawComplete }) => {
-  // Center map on California (a known EMIT hotspot)
+const MapViewer = ({ bounds, onDrawComplete, layers }) => {
+  // Center map on California Central Valley (fixed for EMIT + Landsat calibration + Agriculture/Minerals)
   const center = [36.7783, -119.4179]; 
-  const zoom = 6;
+  const zoom = 9;
   
-  // Restrict map panning to US/North America to prevent wandering into empty ocean
+  // Strictly lock map panning to the Central Valley / Sierra Nevada region
   const maxBounds = [
-    [20.0, -130.0], // Southwest
-    [50.0, -65.0]  // Northeast
+    [35.0, -120.5], // Southwest bound
+    [38.5, -118.0]  // Northeast bound
   ];
 
   return (
@@ -75,13 +89,13 @@ const MapViewer = ({ bounds, onDrawComplete }) => {
         zoom={zoom} 
         maxBounds={maxBounds}
         maxBoundsViscosity={1.0}
-        minZoom={4}
+        minZoom={7}
         style={{ height: '100%', width: '100%', backgroundColor: '#e5e7eb', cursor: 'crosshair' }}
         scrollWheelZoom={true}
       >
         <TileLayer
-          attribution='&copy; <a href="https://carto.com/">CARTO</a>'
-          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.esri.com/">Esri</a>'
+          url="https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"
         />
         
         {/* Custom Drag Tool */}
@@ -89,11 +103,24 @@ const MapViewer = ({ bounds, onDrawComplete }) => {
 
         {/* The Final Set Bounds */}
         {bounds && (
-          <Rectangle bounds={bounds} pathOptions={{ color: 'var(--accent-primary)', weight: 3, fillOpacity: 0.1 }}>
-            <LeafletTooltip direction="top" permanent>
-              Selected Target Area
-            </LeafletTooltip>
-          </Rectangle>
+          <>
+            <Rectangle bounds={bounds} pathOptions={{ color: 'var(--accent-primary)', weight: 3, fillOpacity: 0.1 }}>
+              <LeafletTooltip direction="top" permanent>
+                Selected Target Area
+              </LeafletTooltip>
+            </Rectangle>
+            
+            {/* Mock Overlays when layers are toggled */}
+            {layers?.agriculture && (
+              <Rectangle bounds={bounds} pathOptions={{ color: '#22c55e', stroke: false, fillOpacity: 0.4 }} />
+            )}
+            {layers?.mineral && (
+              <Rectangle bounds={bounds} pathOptions={{ color: '#eab308', stroke: false, fillOpacity: 0.4 }} />
+            )}
+            {layers?.thermal && (
+              <Rectangle bounds={bounds} pathOptions={{ color: '#ef4444', stroke: false, fillOpacity: 0.4 }} />
+            )}
+          </>
         )}
       </MapContainer>
 
@@ -111,7 +138,7 @@ const MapViewer = ({ bounds, onDrawComplete }) => {
         fontSize: '0.875rem',
         pointerEvents: 'none'
       }}>
-        Click and Drag on the map to draw a Bounding Box
+        {bounds ? "Area selected. Local processing limited to 10km² max." : "Click and Drag on the map to select an area (Max 10km²)"}
       </div>
 
     </div>
