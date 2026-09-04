@@ -8,7 +8,7 @@ Consumes results from ALL domain services via Kafka, fuses them,
 and runs the lightweight neural network to generate probability maps.
 
 Kafka topics consumed:
-    'analyzed'           ← spectral_analysis (ANANTAHANARAYANAN)
+    'analyzed'           ← spectral_analysis (LANKAPRIYA)
     'rtm-results'        ← rtm_inversion (LANKAPRIYA)
     'mineral-analyzed'   ← mineral_analysis (ANANTHAN S & HARIKRISHNAN)
     'thermal-processed'  ← thermal (BAINTY KAUR)

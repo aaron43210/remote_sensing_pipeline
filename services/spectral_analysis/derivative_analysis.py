@@ -1,5 +1,5 @@
 # =============================================================
-# OWNER: ANANTAHANARAYANAN
+# OWNER: LANKAPRIYA
 # =============================================================
 import numpy as np
 from scipy.signal import savgol_filter
