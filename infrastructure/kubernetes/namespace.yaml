@@ -1,0 +1,10 @@
+# =============================================================
+# OWNER: AARON
+# =============================================================
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hyperspectral
+  labels:
+    app: hyperspectral-pipeline
+    environment: production

@@ -1,0 +1,18 @@
+# =============================================================
+# OWNER: AARON
+# =============================================================
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hyperspectral-config
+  namespace: hyperspectral
+data:
+  KAFKA_BOOTSTRAP_SERVERS: "kafka-service:9092"
+  MINIO_ENDPOINT: "minio-service:9000"
+  REDIS_HOST: "redis-service"
+  REDIS_PORT: "6379"
+  MLFLOW_TRACKING_URI: "http://mlflow-service:5000"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+  PROMETHEUS_PORT: "8090"
+  # NO passwords or keys here

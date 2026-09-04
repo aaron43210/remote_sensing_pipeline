@@ -1,0 +1,218 @@
+# =============================================================
+# OWNER: AARON  (do not edit — shared infrastructure)
+# =============================================================
+version: '3.8'
+
+services:
+  # Message Broker
+  zookeeper:
+    image: confluentinc/cp-zookeeper:7.4.0
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - "2181:2181"
+    networks:
+      - hyperspectral-net
+
+  kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    depends_on:
+      - zookeeper
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_CREATE_TOPICS: "raw-data:8:1,preprocessed:8:1,analyzed:4:1,ml-analyzed:4:1,mineral-analyzed:4:1,rtm-results:4:1,results:4:1,thermal-raw:4:1,thermal-processed:4:1"
+    networks:
+      - hyperspectral-net
+
+  # Object Storage (MinIO)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - hyperspectral-net
+
+  # Database for API Gateway / Metadata
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_USER: ${DB_USER:-spectral}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-spectral123}
+      POSTGRES_DB: hyperspectral_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - hyperspectral-net
+
+  # Caching Layer
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    networks:
+      - hyperspectral-net
+
+  # Spark Master
+  spark-master:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    environment:
+      SPARK_MODE: master
+      SPARK_MASTER_HOST: spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    networks:
+      - hyperspectral-net
+
+  # Spark Worker
+  spark-worker:
+    build:
+      context: .
+      dockerfile: spark/Dockerfile
+    depends_on:
+      - spark-master
+    environment:
+      SPARK_MODE: worker
+      SPARK_MASTER_URL: spark://spark-master:7077
+      SPARK_WORKER_MEMORY: 4G
+      SPARK_WORKER_CORES: 4
+    deploy:
+      replicas: 2
+    networks:
+      - hyperspectral-net
+
+  # Microservices
+  ingestion:
+    build:
+      context: .
+      dockerfile: services/ingestion/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    networks:
+      - hyperspectral-net
+
+  preprocessing:
+    build:
+      context: .
+      dockerfile: services/preprocessing/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    deploy:
+      replicas: 3
+    networks:
+      - hyperspectral-net
+
+  mineral_analysis:
+    build:
+      context: .
+      dockerfile: services/mineral_analysis/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    deploy:
+      replicas: 4
+    networks:
+      - hyperspectral-net
+
+  ml_inference:
+    build:
+      context: .
+      dockerfile: services/ml_inference/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    deploy:
+      replicas: 2
+    networks:
+      - hyperspectral-net
+
+  api_gateway:
+    build:
+      context: .
+      dockerfile: services/api_gateway/Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      - kafka
+      - postgres
+      - redis
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      DATABASE_URL: postgresql://${DB_USER:-spectral}:${DB_PASSWORD:-spectral123}@postgres:5432/hyperspectral_db
+      REDIS_HOST: redis
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+    networks:
+      - hyperspectral-net
+
+  # ── Thermal Processing Service (Bainty Kaur) ─────────────────────────
+  thermal:
+    build:
+      context: .
+      dockerfile: services/thermal/Dockerfile
+    depends_on:
+      - kafka
+      - minio
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      PROMETHEUS_PORT: 8092
+      LOG_LEVEL: INFO
+    ports:
+      - "8092:8092"
+    networks:
+      - hyperspectral-net
+
+volumes:
+  minio_data:
+  postgres_data:
+
+networks:
+  hyperspectral-net:
+    driver: bridge

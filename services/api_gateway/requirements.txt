@@ -1,0 +1,18 @@
+# =============================================================
+# OWNER: AARON
+# =============================================================
+fastapi==0.103.0
+uvicorn[standard]==0.23.2
+pydantic==2.3.0
+redis==4.6.0
+kafka-python==2.0.2
+msgpack==1.0.5
+numpy==1.24.3
+rasterio>=1.3.8
+minio==7.1.15
+earthaccess==0.8.2
+xarray==2023.10.0
+netCDF4==1.6.5
+zarr==2.16.1
+python-dotenv==1.0.0
+h5netcdf==1.2.0

@@ -1,0 +1,240 @@
+# =============================================================
+# OWNER: AARON
+# =============================================================
+# ── Preprocessing Service ─────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: preprocessing
+  namespace: hyperspectral
+  labels:
+    app: preprocessing
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: preprocessing
+  template:
+    metadata:
+      labels:
+        app: preprocessing
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+    spec:
+      containers:
+        - name: preprocessing
+          image: hyperspectral/preprocessing:latest
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
+            - secretRef:
+                name: hyperspectral-secrets
+          livenessProbe:
+            exec:
+              command: ["python", "-c", "import kafka; print('ok')"]
+            initialDelaySeconds: 30
+            periodSeconds: 30
+          readinessProbe:
+            exec:
+              command: ["python", "-c", "import numpy; print('ok')"]
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+# ── Spectral Analysis Service ─────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spectral-analysis
+  namespace: hyperspectral
+  labels:
+    app: spectral-analysis
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: spectral-analysis
+  template:
+    metadata:
+      labels:
+        app: spectral-analysis
+    spec:
+      containers:
+        - name: spectral-analysis
+          image: hyperspectral/spectral-analysis:latest
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
+            - secretRef:
+                name: hyperspectral-secrets
+---
+# ── ML Inference Service ──────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-inference
+  namespace: hyperspectral
+  labels:
+    app: ml-inference
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ml-inference
+  template:
+    metadata:
+      labels:
+        app: ml-inference
+    spec:
+      containers:
+        - name: ml-inference
+          image: hyperspectral/ml-inference:latest
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
+            - secretRef:
+                name: hyperspectral-secrets
+          volumeMounts:
+            - name: model-storage
+              mountPath: /models
+      volumes:
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: model-pvc
+---
+# ── RTM Inversion Service ─────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: rtm-inversion
+  namespace: hyperspectral
+  labels:
+    app: rtm-inversion
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: rtm-inversion
+  template:
+    metadata:
+      labels:
+        app: rtm-inversion
+    spec:
+      containers:
+        - name: rtm-inversion
+          image: hyperspectral/rtm-inversion:latest
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
+            - secretRef:
+                name: hyperspectral-secrets
+---
+# ── API Gateway ───────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-gateway
+  namespace: hyperspectral
+  labels:
+    app: api-gateway
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: api-gateway
+  template:
+    metadata:
+      labels:
+        app: api-gateway
+    spec:
+      containers:
+        - name: api-gateway
+          image: hyperspectral/api-gateway:latest
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
+            - secretRef:
+                name: hyperspectral-secrets
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+---
+# ── Dashboard ─────────────────────────────────
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dashboard
+  namespace: hyperspectral
+  labels:
+    app: dashboard
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dashboard
+  template:
+    metadata:
+      labels:
+        app: dashboard
+    spec:
+      containers:
+        - name: dashboard
+          image: hyperspectral/dashboard:latest
+          ports:
+            - containerPort: 8501
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+          envFrom:
+            - configMapRef:
+                name: hyperspectral-config
