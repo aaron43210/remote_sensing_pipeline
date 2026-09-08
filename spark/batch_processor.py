@@ -224,7 +224,7 @@ def run_spark_job():
         from shared.config import Settings
         minio_client = Settings.get_minio_client()
 
-        # Collect scene IDs from vegetation results
+        # Collect scene IDs from consolidated ML results (Hydra MTL)
         scenes = []
         try:
             objects = minio_client.list_objects(
@@ -234,19 +234,6 @@ def run_spark_job():
                 if obj.is_dir:
                     scene_id = obj.object_name.rstrip('/')
                     scenes.append(scene_id)
-        except Exception:
-            pass
-
-        # Also collect mineral results
-        try:
-            objects = minio_client.list_objects(
-                'mineral-results', prefix='', recursive=False
-            )
-            for obj in objects:
-                if obj.is_dir:
-                    scene_id = obj.object_name.rstrip('/')
-                    if scene_id not in scenes:
-                        scenes.append(scene_id)
         except Exception:
             pass
 
@@ -263,25 +250,15 @@ def run_spark_job():
         def process_scene(scene_id):
             results = {}
 
-            # Stitch vegetation results
+            # Stitch consolidated results
             try:
                 stats = stitcher.stitch_and_export(
                     scene_id, 'ml-results', f'{scene_id}/'
                 )
                 if stats:
-                    results['vegetation'] = stats
+                    results['hydra_results'] = stats
             except Exception as e:
-                results['vegetation_error'] = str(e)
-
-            # Stitch mineral results
-            try:
-                stats = stitcher.stitch_and_export(
-                    scene_id, 'mineral-results', f'{scene_id}/'
-                )
-                if stats:
-                    results['minerals'] = stats
-            except Exception as e:
-                results['minerals_error'] = str(e)
+                results['hydra_error'] = str(e)
 
             return (scene_id, results)
 
@@ -306,7 +283,7 @@ def run_local():
 
     stitcher = COGStitcher()
 
-    for bucket, prefix in [('ml-results', ''), ('mineral-results', '')]:
+    for bucket, prefix in [('ml-results', '')]:
         try:
             objects = minio_client.list_objects(
                 bucket, prefix=prefix, recursive=False

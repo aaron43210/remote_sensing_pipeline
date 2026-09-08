@@ -2,33 +2,27 @@
 # OWNER: AARON
 # =============================================================
 """
-ML Inference Microservice — Fusion + Prediction
+ML Inference Microservice — Hydra Multi-Task Learning
 
-Consumes results from ALL domain services via Kafka, fuses them,
-and runs the lightweight neural network to generate probability maps.
+Consumes preprocessed, band-selected hyperspectral data directly,
+and runs the HydraMTLNet to generate probability maps for
+agriculture, minerals, and thermal anomalies simultaneously.
 
-Kafka topics consumed:
-    'analyzed'           ← spectral_analysis (LANKAPRIYA)
-    'rtm-results'        ← rtm_inversion (LANKAPRIYA)
-    'mineral-analyzed'   ← mineral_analysis (ANANTHAN S & HARIKRISHNAN)
-    'thermal-processed'  ← thermal (BAINTY KAUR)
+Kafka topic consumed:
+    'preprocessed-multiband' ← preprocessing (TEAMMATE)
 
 Kafka topic produced:
     'ml-analyzed'        → api_gateway / frontend (AARON)
 
 Flow:
-    1. Each domain service publishes its results (with scene_id)
-    2. This service tracks arrivals in Redis
-    3. When all requested tasks for a scene_id have arrived:
-       a. Download feature maps (.npz) from MinIO
-       b. Fuse into per-pixel feature vectors
-       c. Run FusionLightweightNet → probability map
-       d. Save results to MinIO
-       e. Publish summary to Kafka 'ml-analyzed'
+    1. Preprocessing service publishes message (with scene_id & path to 10-band data)
+    2. Download 10-band feature maps (.npy or .zarr) from MinIO
+    3. Run HydraMTLNet (extracts features & branches to 3 heads)
+    4. Save outputs (Agriculture params, Mineral maps, Anomaly maps) to MinIO
+    5. Publish summary to Kafka 'ml-analyzed'
 
 Performance:
-    ~0.1ms per pixel on CPU (model is only ~2,000 params)
-    ~2.5 seconds for 512×512 scene
+    ~0.1ms per pixel on CPU (model is ~3,000 params)
 """
 
 import os
@@ -40,20 +34,14 @@ import torch
 import tempfile
 import shutil
 import msgpack
-import redis
 from datetime import datetime
 from minio import Minio
 from kafka import KafkaConsumer
 from shared.kafka_helpers import create_reliable_producer, send_with_callback
 from shared.config import Settings
-from prometheus_client import Counter, Histogram, Gauge, start_http_server
+from prometheus_client import Counter, Histogram, start_http_server
 
-from model import (
-    FusionLightweightNet,
-    fuse_service_outputs,
-    TOTAL_FEATURES_HSI,
-    TOTAL_FEATURES_ALL,
-)
+from model import HydraMTLNet, INPUT_BANDS, MINERAL_CLASSES
 
 logging.basicConfig(
     level=logging.INFO,
@@ -75,48 +63,21 @@ INFERENCE_TIME = Histogram(
 )
 
 
-# ── Kafka topic → MinIO bucket mapping ──────────────────────────────────────
-TOPIC_CONFIG = {
-    'analyzed': {
-        'bucket': 'analyzed-data',
-        'redis_key': 'spectral',
-        'path_field': 'feature_path',
-    },
-    'rtm-results': {
-        'bucket': 'biophysical-params',
-        'redis_key': 'rtm',
-        'path_field': 'params_path',
-    },
-    'mineral-analyzed': {
-        'bucket': 'mineral-results',
-        'redis_key': 'mineral',
-        'path_field': 'result_path',
-    },
-    'thermal-processed': {
-        'bucket': 'thermal-processed',
-        'redis_key': 'thermal',
-        'path_field': 'products_path',
-    },
-}
-
-
 class MLInferenceService:
     """
-    Fusion-based ML inference service.
-
-    Waits for domain services to finish, fuses their outputs,
-    and runs the lightweight neural network.
+    Hydra-based ML inference service.
+    Processes pre-selected bands through a multi-task network.
     """
 
     def __init__(self):
         kafka_servers = Settings.KAFKA_BOOTSTRAP_SERVERS
 
-        # ── Kafka: consume from all domain result topics ─────────────────
+        # ── Kafka: consume only from the preprocessed multiband topic ────
         self.consumer = KafkaConsumer(
-            *TOPIC_CONFIG.keys(),
+            'preprocessed-multiband',
             bootstrap_servers=kafka_servers,
             value_deserializer=lambda m: msgpack.unpackb(m, raw=False),
-            group_id='ml-inference-group',
+            group_id='ml-inference-hydra-group',
             auto_offset_reset='earliest',
         )
 
@@ -124,25 +85,16 @@ class MLInferenceService:
 
         # ── MinIO ────────────────────────────────────────────────────────
         self.minio = Settings.get_minio_client()
-        for bucket in ['ml-results', 'ml-models']:
+        for bucket in ['ml-results', 'ml-models', 'preprocessed-data']:
             if not self.minio.bucket_exists(bucket):
                 self.minio.make_bucket(bucket)
 
-        # ── Redis: track which services have finished per scene ──────────
-        self.redis = redis.Redis(
-            host=Settings.REDIS_HOST,
-            port=Settings.REDIS_PORT,
-            decode_responses=True,
-        )
-
         # ── Model ────────────────────────────────────────────────────────
         self.device = 'cpu'
-        self.n_classes = 16
 
-        # Default: HSI-only features (no thermal)
-        self.model = FusionLightweightNet(
-            n_features=TOTAL_FEATURES_HSI,
-            n_classes=self.n_classes,
+        self.model = HydraMTLNet(
+            n_features=INPUT_BANDS,
+            n_mineral_classes=MINERAL_CLASSES,
         ).to(self.device)
 
         self._load_model_weights()
@@ -155,13 +107,13 @@ class MLInferenceService:
         except OSError:
             logger.warning("Prometheus port %d already in use", prom_port)
 
-        logger.info("ML Inference service initialized (fusion mode)")
+        logger.info("ML Inference service initialized (Hydra MTL mode)")
 
     # ── Model weight loading ─────────────────────────────────────────────
 
     def _load_model_weights(self):
         """Load pretrained model weights from disk or MinIO."""
-        weights_path = os.getenv('MODEL_WEIGHTS', 'model_weights.pth')
+        weights_path = os.getenv('MODEL_WEIGHTS', 'hydra_weights.pth')
 
         if os.path.exists(weights_path):
             state_dict = torch.load(weights_path, map_location=self.device)
@@ -180,106 +132,65 @@ class MLInferenceService:
 
     def process(self):
         """Main Kafka consumer loop."""
-        logger.info(
-            "Listening on topics: %s",
-            list(TOPIC_CONFIG.keys()),
-        )
+        logger.info("Listening on topic: preprocessed-multiband")
 
         for message in self.consumer:
             try:
-                topic = message.topic
-                data  = message.value
-
+                data = message.value
                 scene_id = data.get('scene_id', 'unknown')
-                config   = TOPIC_CONFIG.get(topic)
-
-                if config is None:
-                    continue
-
-                # Store result path in Redis
-                redis_key      = f"ml:scene:{scene_id}"
-                result_path    = data.get(config['path_field'], '')
-                service_key    = config['redis_key']
-
-                self.redis.hset(redis_key, service_key, result_path)
-                self.redis.expire(redis_key, 3600)  # 1 hour TTL
+                data_path = data.get('data_path', '')
 
                 logger.info(
-                    "Received %s result for %s (path=%s)",
-                    service_key, scene_id, result_path,
+                    "Received multiband data for %s (path=%s) — starting Hydra inference",
+                    scene_id, data_path,
                 )
 
-                # Check if all required services have reported
-                tasks = self._get_required_tasks(scene_id)
-                arrived = self.redis.hgetall(redis_key)
-
-                if self._all_tasks_ready(tasks, arrived):
-                    logger.info(
-                        "All tasks ready for %s: %s — starting fusion",
-                        scene_id, list(arrived.keys()),
-                    )
-                    self._run_fusion(scene_id, arrived)
-
-                    # Cleanup Redis
-                    self.redis.delete(redis_key)
+                self._run_inference(scene_id, data_path)
 
             except Exception as exc:
                 SCENES_PROCESSED.labels(status='error').inc()
                 logger.error("Error: %s", exc, exc_info=True)
 
-    # ── Fusion pipeline ──────────────────────────────────────────────────
+    # ── Inference pipeline ───────────────────────────────────────────────
 
-    def _run_fusion(self, scene_id: str, arrived: dict):
-        """Download results from MinIO, fuse, predict, publish."""
-        local_dir = tempfile.mkdtemp(prefix="ml_fusion_")
+    def _run_inference(self, scene_id: str, data_path: str):
+        """Download multiband data from MinIO, predict, publish."""
+        local_dir = tempfile.mkdtemp(prefix="ml_hydra_")
         try:
             start_time = time.time()
 
-            # 1. Download feature maps from each service
-            spectral = self._load_spectral(arrived.get('spectral'), local_dir)
-            rtm      = self._load_rtm(arrived.get('rtm'), local_dir)
-            mineral  = self._load_mineral(arrived.get('mineral'), local_dir)
-            thermal  = self._load_thermal(arrived.get('thermal'), local_dir)
+            # 1. Download multiband data
+            bands_array, rows, cols = self._load_multiband_data(data_path, local_dir)
+            if bands_array is None:
+                raise ValueError(f"Failed to load data for {scene_id}")
 
-            # Determine scene dimensions from first available result
-            rows, cols = self._get_scene_shape(spectral, rtm, mineral)
-
-            # 2. Fuse into per-pixel feature vectors
-            include_thermal = thermal is not None
-            fused = fuse_service_outputs(
-                spectral=spectral, rtm=rtm, mineral=mineral,
-                thermal=thermal, rows=rows, cols=cols,
-            )
-
-            # 3. Run neural network
-            n_features = fused.shape[1]
+            # 2. Reshape and Pad/Truncate if necessary
+            n_pixels, n_features = bands_array.shape
             if n_features != self.model.n_features:
                 logger.warning(
-                    "Feature mismatch: got %d, model expects %d. "
-                    "Padding/truncating.",
+                    "Feature mismatch: got %d bands, model expects %d.",
                     n_features, self.model.n_features,
                 )
                 if n_features < self.model.n_features:
-                    pad = np.zeros(
-                        (fused.shape[0], self.model.n_features - n_features),
-                        dtype=np.float32,
-                    )
-                    fused = np.hstack([fused, pad])
+                    pad = np.zeros((n_pixels, self.model.n_features - n_features), dtype=np.float32)
+                    bands_array = np.hstack([bands_array, pad])
                 else:
-                    fused = fused[:, :self.model.n_features]
+                    bands_array = bands_array[:, :self.model.n_features]
 
-            predictions, proba, inference_ms = self._predict(fused)
+            # 3. Run neural network
+            predictions, inference_ms = self._predict(bands_array)
 
-            class_map = predictions.reshape(rows, cols)
-            proba_map = proba.reshape(rows, cols, -1)
+            agri_map = predictions['agriculture_params'].reshape(rows, cols, 4)
+            mineral_map = predictions['mineral_probs'].reshape(rows, cols, -1)
+            anomaly_map = predictions['anomaly_prob'].reshape(rows, cols)
 
             elapsed = time.time() - start_time
             PROCESSING_TIME.observe(elapsed)
             INFERENCE_TIME.observe(inference_ms)
 
-            # 4. Save results to MinIO
+            # 4. Save all results to a single MinIO bucket directory
             summary = self._save_results(
-                scene_id, class_map, proba_map, local_dir, elapsed, inference_ms,
+                scene_id, agri_map, mineral_map, anomaly_map, local_dir, elapsed, inference_ms
             )
 
             # 5. Publish to Kafka
@@ -287,179 +198,92 @@ class MLInferenceService:
             SCENES_PROCESSED.labels(status='success').inc()
 
             logger.info(
-                "ML complete for %s: %d classes, %.1fs total, %.3fms/pixel",
-                scene_id,
-                summary['n_classes_predicted'],
-                elapsed,
-                inference_ms,
+                "Hydra ML complete for %s: %.1fs total, %.3fms/pixel",
+                scene_id, elapsed, inference_ms,
             )
 
         except Exception as exc:
             SCENES_PROCESSED.labels(status='error').inc()
-            logger.error("Fusion failed for %s: %s", scene_id, exc, exc_info=True)
+            logger.error("Inference failed for %s: %s", scene_id, exc, exc_info=True)
         finally:
             shutil.rmtree(local_dir, ignore_errors=True)
 
-    def _predict(self, fused: np.ndarray):
-        """Run model inference on fused feature array."""
-        tensor = torch.FloatTensor(fused).to(self.device)
+    def _load_multiband_data(self, path: str, local_dir: str):
+        """Load the pre-selected bands array from MinIO."""
+        if not path:
+            return None, 0, 0
+        try:
+            local = os.path.join(local_dir, 'multiband.npy')
+            self.minio.fget_object('preprocessed-data', path, local)
+            data = np.load(local)
+            
+            # Assuming data is shaped (rows, cols, bands)
+            if len(data.shape) == 3:
+                rows, cols, bands = data.shape
+                data_flat = data.reshape(rows * cols, bands).astype(np.float32)
+                data_flat = np.nan_to_num(data_flat, nan=0.0)
+                return data_flat, rows, cols
+            else:
+                logger.error("Unexpected data shape: %s", data.shape)
+                return None, 0, 0
+        except Exception as e:
+            logger.warning("Could not load multiband data: %s", e)
+            return None, 0, 0
+
+    def _predict(self, x: np.ndarray):
+        """Run model inference."""
+        tensor = torch.FloatTensor(x).to(self.device)
 
         start = time.time()
-        with torch.no_grad():
-            logits = self.model(tensor)
-            proba  = torch.softmax(logits, dim=1)
+        preds = self.model.predict(tensor)
+        elapsed_ms = ((time.time() - start) / len(x)) * 1000
 
-        elapsed_ms = ((time.time() - start) / len(fused)) * 1000
+        # Move to CPU/numpy
+        out = {
+            'agriculture_params': preds['agriculture_params'].cpu().numpy(),
+            'mineral_probs': preds['mineral_probs'].cpu().numpy(),
+            'anomaly_prob': preds['anomaly_prob'].cpu().numpy(),
+        }
 
-        predictions = logits.argmax(dim=1).cpu().numpy()
-        proba_np    = proba.cpu().numpy()
+        return out, elapsed_ms
 
-        return predictions, proba_np, elapsed_ms
+    def _save_results(self, scene_id, agri_map, mineral_map, anomaly_map, local_dir, elapsed, inference_ms):
+        """Save all multi-task output maps to MinIO."""
+        
+        # Save Agriculture Map (Cab, Cw, LAI, N)
+        agri_path = os.path.join(local_dir, 'agriculture.npy')
+        np.save(agri_path, agri_map)
+        self.minio.fput_object('ml-results', f'{scene_id}/agriculture.npy', agri_path)
 
-    # ── MinIO loaders ────────────────────────────────────────────────────
+        # Save Mineral Map (Top probability indices to save space)
+        mineral_class = np.argmax(mineral_map, axis=2)
+        min_cls_path = os.path.join(local_dir, 'mineral_class.npy')
+        np.save(min_cls_path, mineral_class)
+        self.minio.fput_object('ml-results', f'{scene_id}/mineral_class.npy', min_cls_path)
 
-    def _load_spectral(self, path: str, local_dir: str):
-        if not path:
-            return None
-        try:
-            local = os.path.join(local_dir, 'spectral.npz')
-            self.minio.fget_object('analyzed-data', path, local)
-            data = np.load(local)
-            return {k: data[k] for k in data.files}
-        except Exception as e:
-            logger.warning("Could not load spectral: %s", e)
-            return None
+        min_prob_path = os.path.join(local_dir, 'mineral_probabilities.npy')
+        np.save(min_prob_path, np.max(mineral_map, axis=2))
+        self.minio.fput_object('ml-results', f'{scene_id}/mineral_probabilities.npy', min_prob_path)
 
-    def _load_rtm(self, path: str, local_dir: str):
-        if not path:
-            return None
-        try:
-            local = os.path.join(local_dir, 'rtm.npz')
-            self.minio.fget_object('biophysical-params', path, local)
-            data = np.load(local)
-            return {k: data[k] for k in data.files}
-        except Exception as e:
-            logger.warning("Could not load RTM: %s", e)
-            return None
-
-    def _load_mineral(self, path: str, local_dir: str):
-        if not path:
-            return None
-        try:
-            # Mineral saves multiple files: abundances.npz, confidence.npy, etc.
-            prefix = path.rstrip('/')
-            result = {}
-
-            # Abundances
-            abund_local = os.path.join(local_dir, 'abundances.npz')
-            try:
-                self.minio.fget_object(
-                    'mineral-results', f"{prefix}/abundances.npz", abund_local
-                )
-                abund_data = np.load(abund_local)
-                result['abundances'] = {k: abund_data[k] for k in abund_data.files}
-            except Exception:
-                result['abundances'] = {}
-
-            # Confidence
-            conf_local = os.path.join(local_dir, 'confidence.npy')
-            try:
-                self.minio.fget_object(
-                    'mineral-results', f"{prefix}/confidence.npy", conf_local
-                )
-                result['confidence'] = np.load(conf_local)
-            except Exception:
-                pass
-
-            return result if result.get('abundances') else None
-        except Exception as e:
-            logger.warning("Could not load mineral: %s", e)
-            return None
-
-    def _load_thermal(self, path: str, local_dir: str):
-        if not path:
-            return None
-        try:
-            # Thermal saves summary.json with scalar stats
-            prefix = path.rstrip('/')
-            summary_local = os.path.join(local_dir, 'thermal_summary.json')
-            self.minio.fget_object(
-                'thermal-results', f"{prefix}/summary.json", summary_local
-            )
-            with open(summary_local) as f:
-                summary = json.load(f)
-            return {
-                'mean_lst':       summary.get('statistics', {}).get('mean_temp_c', 0),
-                'uhi_intensity':  summary.get('uhi', {}).get('uhi_intensity_c', 0),
-                'n_hotspots':     len(summary.get('hotspots', [])),
-            }
-        except Exception as e:
-            logger.warning("Could not load thermal: %s", e)
-            return None
-
-    # ── Helpers ───────────────────────────────────────────────────────────
-
-    def _get_scene_shape(self, spectral, rtm, mineral):
-        """Determine scene (rows, cols) from first available result."""
-        for data in [spectral, rtm]:
-            if data is not None:
-                for key, arr in data.items():
-                    if hasattr(arr, 'shape') and len(arr.shape) == 2:
-                        return arr.shape
-        # Fallback
-        if mineral and 'confidence' in mineral:
-            return mineral['confidence'].shape
-        return (512, 512)
-
-    def _get_required_tasks(self, scene_id: str) -> set:
-        """
-        Determine which tasks are required for this scene.
-        For now, require spectral + rtm + mineral (HSI core).
-        Thermal is optional bonus.
-        """
-        return {'spectral', 'rtm', 'mineral'}
-
-    def _all_tasks_ready(self, required: set, arrived: dict) -> bool:
-        """Check if all required services have reported."""
-        return required.issubset(set(arrived.keys()))
-
-    def _save_results(self, scene_id, class_map, proba_map, local_dir,
-                      elapsed, inference_ms):
-        """Save classification and probability maps to MinIO."""
-        # Classification map
-        cls_path = os.path.join(local_dir, 'classification.npy')
-        np.save(cls_path, class_map)
-        self.minio.fput_object(
-            'ml-results', f'{scene_id}/classification.npy', cls_path
-        )
-
-        # Probability map (top-3 classes to save space)
-        top3_idx  = np.argsort(proba_map, axis=2)[:, :, -3:]
-        top3_prob = np.take_along_axis(proba_map, top3_idx, axis=2)
-        prob_path = os.path.join(local_dir, 'probabilities.npz')
-        np.savez_compressed(
-            prob_path, top3_indices=top3_idx, top3_proba=top3_prob
-        )
-        self.minio.fput_object(
-            'ml-results', f'{scene_id}/probabilities.npz', prob_path
-        )
+        # Save Anomaly Map
+        anomaly_path = os.path.join(local_dir, 'anomaly.npy')
+        np.save(anomaly_path, anomaly_map)
+        self.minio.fput_object('ml-results', f'{scene_id}/anomaly.npy', anomaly_path)
 
         # Summary JSON
         summary = {
             'scene_id':             scene_id,
             'timestamp':            datetime.now().isoformat(),
-            'shape':                list(class_map.shape),
-            'n_classes_predicted':  int(len(np.unique(class_map))),
+            'shape':                list(anomaly_map.shape),
             'processing_time_sec':  round(elapsed, 2),
             'inference_ms_per_px':  round(inference_ms, 4),
+            'output_layers':        ['agriculture', 'mineral_class', 'mineral_probabilities', 'anomaly']
         }
 
         summary_path = os.path.join(local_dir, 'summary.json')
         with open(summary_path, 'w') as f:
             json.dump(summary, f, indent=2)
-        self.minio.fput_object(
-            'ml-results', f'{scene_id}/summary.json', summary_path
-        )
+        self.minio.fput_object('ml-results', f'{scene_id}/summary.json', summary_path)
 
         return summary
 
