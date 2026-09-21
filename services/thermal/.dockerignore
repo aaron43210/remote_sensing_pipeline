@@ -1,0 +1,46 @@
+# =============================================================
+# Docker ignore file
+# =============================================================
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Testing data
+test_data/
+
+# Local output
+output/
+outputs/
+results/
+
+# Logs
+*.log
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Documentation
+*.md
+
+# Temporary files
+*.tmp
+*.temp
+
+# OS files
+.DS_Store
+Thumbs.db

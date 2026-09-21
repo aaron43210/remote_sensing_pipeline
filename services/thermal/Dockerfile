@@ -1,32 +1,53 @@
 # =============================================================
 # OWNER: BAINTY KAUR
 # =============================================================
-FROM python:3.10-slim
+
+FROM python:3.11-slim
+
+# -------------------------------------------------------------
+# Environment settings
+# -------------------------------------------------------------
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# -------------------------------------------------------------
+# System dependencies required by Rasterio / GDAL / PROJ
+# -------------------------------------------------------------
+
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libexpat1 \
+    libexpat1-dev \
+    libgdal-dev \
+    libgeos-dev \
+    libproj-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# -------------------------------------------------------------
+# Working directory
+# -------------------------------------------------------------
 
 WORKDIR /app
 
-# GDAL is needed for rasterio (reading COG files from MinIO)
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        gdal-bin \
-        libgdal-dev \
-        gcc \
-        g++ \
-        python3-dev && \
-    rm -rf /var/lib/apt/lists/*
+# -------------------------------------------------------------
+# Install ONLY thermal-service dependencies
+# -------------------------------------------------------------
 
-COPY services/thermal/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY services/thermal/requirements.txt ./requirements.txt
 
-# Copy shared config (read-only reference — do not edit shared/)
-COPY shared/ ./shared/
+RUN python -m pip install --no-cache-dir --upgrade pip && \
+    python -m pip install --no-cache-dir -r requirements.txt
 
-# Copy only this service's code
+# -------------------------------------------------------------
+# Copy ONLY the thermal service
+# -------------------------------------------------------------
+
 COPY services/thermal/ ./
 
-ENV PYTHONUNBUFFERED=1
-
-# Expose Prometheus metrics port
-EXPOSE 8092
+# -------------------------------------------------------------
+# Start thermal processing service
+# -------------------------------------------------------------
 
 CMD ["python", "main.py"]

@@ -1,11 +1,23 @@
 # =============================================================
 # OWNER: BAINTY KAUR
 # =============================================================
+
+# Numerical processing
 numpy==1.24.3
 scipy==1.11.1
+
+# Raster / geospatial processing
 rasterio==1.3.8
-kafka-python==2.0.2
+
+# Kafka messaging
+kafka-python-ng
 msgpack==1.0.5
+
+# Object storage
 minio==7.1.15
+
+# Monitoring
 prometheus-client==0.17.1
+
+# Redis
 redis==4.6.0

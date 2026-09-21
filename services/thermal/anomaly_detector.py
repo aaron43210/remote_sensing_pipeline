@@ -4,264 +4,1053 @@
 """
 Thermal Anomaly Detection
 
-Detects thermal anomalies using physics-based and statistical methods.
-No CNN or deep learning — pure physics, statistics, and signal processing.
+Statistical and spatial analysis of Landsat LST.
 
-Detectable anomalies:
-    - Urban Heat Islands (UHI)
-    - Industrial heat sources
-    - Wildfire hotspots
-    - Geothermal features
-    - Agricultural stress (irrigation failures)
+Implemented methods
+-------------------
+1. Global Z-score anomaly detection
+2. Local moving-window Z-score anomaly detection
+3. Thermal hotspot detection
+4. Connected-component filtering
 
-Methods implemented:
-    1. Global z-score anomaly
-    2. Local moving-window anomaly
-    3. Urban Heat Island (UHI) intensity
-    4. Hotspot detection (connected component labeling)
+Methodology
+-----------
+Global anomaly:
+    Z = (LST - scene_mean) / scene_std
 
-References
-----------
-- Voogt & Oke (2003): "Thermal remote sensing of urban climates."
-  Remote Sensing of Environment, 86, 370-384.
-- Li et al. (2020): "Urban heat island detection and analysis."
-  ISPRS Journal of Photogrammetry and Remote Sensing, 164, 45-56.
-- Wan et al. (2004): "Quality assessment and validation of the
-  MODIS global land surface temperature." Int. J. Remote Sensing.
+    Hot anomaly:
+        Z >= GLOBAL_Z_THRESHOLD
+
+    Cold anomaly:
+        Z <= -GLOBAL_Z_THRESHOLD
+
+Local anomaly:
+    11 x 11 pixel neighbourhood by default.
+
+    Local statistics are calculated using only valid pixels,
+    so NoData values do not contaminate the local mean/std.
+
+Hotspots:
+    1. Calculate the 95th percentile of valid LST.
+    2. Select pixels >= percentile threshold.
+    3. Apply 8-connected component analysis.
+    4. Remove components smaller than 9 pixels.
+
+At 30 m resolution:
+
+    9 pixels = 9 x 30 x 30 m²
+             = 8,100 m²
+             = 0.81 hectares
+
+Urban Heat Island / SUHI
+------------------------
+SUHI is handled separately in suhi.py because it requires
+urban/rural land-cover masks and is therefore kept separate
+from purely statistical anomaly detection.
 """
+
+# =============================================================
+# IMPORTS
+# =============================================================
+
+import logging
 
 import numpy as np
 from scipy import ndimage
-import logging
+
+from config import ThermalConfig
+
+
+# =============================================================
+# LOGGING
+# =============================================================
 
 logger = logging.getLogger(__name__)
 
 
+# =============================================================
+# THERMAL ANOMALY DETECTOR
+# =============================================================
+
 class ThermalAnomalyDetector:
     """
-    Physics-based thermal anomaly detection for Landsat LST data.
+    Statistical thermal anomaly detector for LST rasters.
 
-    Usage:
-        detector = ThermalAnomalyDetector()
-        z_scores, hot, cold = detector.detect_global_anomalies(lst)
-        local_z, anomalies  = detector.detect_local_anomalies(lst)
-        uhi, details        = detector.compute_uhi_intensity(lst)
-        hotspot_map, info   = detector.detect_hotspots(lst)
+    The detector does not perform LST retrieval itself.
+    It receives an LST array in degrees Celsius.
     """
 
-    def detect_global_anomalies(self, lst_celsius: np.ndarray,
-                                 z_threshold: float = 2.0):
+    # =========================================================
+    # GLOBAL Z-SCORE
+    # =========================================================
+
+    def detect_global_anomalies(
+        self,
+        lst_celsius: np.ndarray,
+        z_threshold: float = None,
+    ):
         """
-        Scene-wide z-score anomaly detection.
+        Detect scene-wide thermal anomalies using Z-score.
 
-        Each pixel is scored relative to the whole scene mean and std.
-        Pixels > z_threshold standard deviations from mean = anomaly.
+        Formula
+        -------
+            Z = (LST - mean) / std
 
-        Args:
-            lst_celsius:  (rows, cols) LST in °C.
-            z_threshold:  Number of σ for anomaly (default 2.0 → ~95th percentile).
+        Hot anomaly:
+            Z >= z_threshold
 
-        Returns:
-            z_scores:  (rows, cols) float32  z-score per pixel.
-            hot_mask:  (rows, cols) bool     True = hot anomaly.
-            cold_mask: (rows, cols) bool     True = cold anomaly.
+        Cold anomaly:
+            Z <= -z_threshold
+
+        Parameters
+        ----------
+        lst_celsius:
+            2D LST array in degrees Celsius.
+
+        z_threshold:
+            Z-score threshold.
+            Defaults to ThermalConfig.GLOBAL_Z_THRESHOLD.
+
+        Returns
+        -------
+        z_scores:
+            Float32 Z-score raster.
+
+        hot_mask:
+            Boolean raster containing positive thermal anomalies.
+
+        cold_mask:
+            Boolean raster containing negative thermal anomalies.
+
+        statistics:
+            Dictionary containing mean/std/threshold information.
         """
-        valid = lst_celsius[(~np.isnan(lst_celsius)) & (lst_celsius != 0)]
 
-        if len(valid) == 0:
-            z = np.zeros_like(lst_celsius, dtype=np.float32)
-            return z, z.astype(bool), z.astype(bool)
+        if z_threshold is None:
+            z_threshold = ThermalConfig.GLOBAL_Z_THRESHOLD
 
-        mean = float(np.mean(valid))
-        std  = float(np.std(valid))
-
-        if std < 0.01:
-            z = np.zeros_like(lst_celsius, dtype=np.float32)
-            return z, z.astype(bool), z.astype(bool)
-
-        z_scores = ((lst_celsius - mean) / std).astype(np.float32)
-        z_scores = np.nan_to_num(z_scores, nan=0.0)
-
-        hot_mask  = z_scores >  z_threshold
-        cold_mask = z_scores < -z_threshold
-
-        logger.info(
-            "Global anomalies: mean=%.1f°C, std=%.1f°C, "
-            "hot_px=%d, cold_px=%d (threshold=±%.1fσ)",
-            mean, std, int(np.sum(hot_mask)), int(np.sum(cold_mask)), z_threshold
+        lst = np.asarray(
+            lst_celsius,
+            dtype=np.float32,
         )
 
-        return z_scores, hot_mask, cold_mask
+        self._validate_array(lst)
 
-    def detect_local_anomalies(self, lst_celsius: np.ndarray,
-                                window_size: int = 11,
-                                z_threshold: float = 2.0):
+        valid_mask = self._valid_mask(lst)
+
+        valid_values = lst[valid_mask]
+
+        # -----------------------------------------------------
+        # No valid pixels
+        # -----------------------------------------------------
+
+        if valid_values.size == 0:
+
+            logger.warning(
+                "Global anomaly detection: no valid pixels."
+            )
+
+            z_scores = self._empty_float_output(
+                lst.shape
+            )
+
+            hot_mask = np.zeros(
+                lst.shape,
+                dtype=bool,
+            )
+
+            cold_mask = np.zeros(
+                lst.shape,
+                dtype=bool,
+            )
+
+            statistics = {
+                "mean": None,
+                "std": None,
+                "threshold": float(z_threshold),
+                "hot_pixels": 0,
+                "cold_pixels": 0,
+            }
+
+            return (
+                z_scores,
+                hot_mask,
+                cold_mask,
+                statistics,
+            )
+
+        # -----------------------------------------------------
+        # Scene statistics
+        # -----------------------------------------------------
+
+        mean = float(
+            np.mean(valid_values)
+        )
+
+        std = float(
+            np.std(valid_values)
+        )
+
+        # -----------------------------------------------------
+        # Zero / near-zero variance
+        # -----------------------------------------------------
+
+        if std < 1e-10:
+
+            logger.warning(
+                "Global anomaly detection: scene standard "
+                "deviation is effectively zero."
+            )
+
+            z_scores = self._empty_float_output(
+                lst.shape
+            )
+
+            hot_mask = np.zeros(
+                lst.shape,
+                dtype=bool,
+            )
+
+            cold_mask = np.zeros(
+                lst.shape,
+                dtype=bool,
+            )
+
+            statistics = {
+                "mean": mean,
+                "std": std,
+                "threshold": float(z_threshold),
+                "hot_pixels": 0,
+                "cold_pixels": 0,
+            }
+
+            return (
+                z_scores,
+                hot_mask,
+                cold_mask,
+                statistics,
+            )
+
+        # -----------------------------------------------------
+        # Calculate global Z-score
+        # -----------------------------------------------------
+
+        z_scores = np.full(
+            lst.shape,
+            ThermalConfig.OUTPUT_NODATA,
+            dtype=np.float32,
+        )
+
+        z_scores[valid_mask] = (
+            (
+                lst[valid_mask] - mean
+            ) / std
+        ).astype(np.float32)
+
+        # -----------------------------------------------------
+        # Hot / cold anomaly masks
+        # -----------------------------------------------------
+
+        hot_mask = (
+            valid_mask
+            & (z_scores >= z_threshold)
+        )
+
+        cold_mask = (
+            valid_mask
+            & (z_scores <= -z_threshold)
+        )
+
+        logger.info(
+            "Global anomaly detection: "
+            "mean=%.4f°C, std=%.4f°C, "
+            "threshold=±%.2fσ, "
+            "hot_px=%d, cold_px=%d",
+            mean,
+            std,
+            z_threshold,
+            int(np.sum(hot_mask)),
+            int(np.sum(cold_mask)),
+        )
+
+        statistics = {
+            "mean": mean,
+            "std": std,
+            "threshold": float(z_threshold),
+            "hot_pixels": int(
+                np.sum(hot_mask)
+            ),
+            "cold_pixels": int(
+                np.sum(cold_mask)
+            ),
+        }
+
+        return (
+            z_scores,
+            hot_mask,
+            cold_mask,
+            statistics,
+        )
+
+    # =========================================================
+    # LOCAL Z-SCORE
+    # =========================================================
+
+    def detect_local_anomalies(
+        self,
+        lst_celsius: np.ndarray,
+        window_size: int = None,
+        z_threshold: float = None,
+    ):
         """
-        Local neighbourhood z-score anomaly detection.
+        Detect local thermal anomalies using a moving window.
 
-        Each pixel is compared to its local spatial neighbourhood.
-        Better than global for detecting small-scale hotspots embedded
-        in warm backgrounds (e.g. factory in a warm city).
+        Default:
+            window = 11 x 11
+            threshold = 2σ
 
-        Args:
-            lst_celsius:  (rows, cols) LST in °C.
-            window_size:  Size of local neighbourhood in pixels (default 11 × 11).
-            z_threshold:  Anomaly threshold.
+        NoData pixels are excluded from local statistics.
 
-        Returns:
-            local_z:   (rows, cols) float32  local z-score.
-            anomalies: (rows, cols) bool     True = local hot anomaly.
+        Parameters
+        ----------
+        lst_celsius:
+            2D LST array in degrees Celsius.
+
+        window_size:
+            Odd-sized local neighbourhood.
+
+        z_threshold:
+            Local Z-score threshold.
+
+        Returns
+        -------
+        local_z:
+            Float32 local Z-score raster.
+
+        anomaly_mask:
+            Boolean local-hot-anomaly raster.
+
+        statistics:
+            Dictionary containing local-analysis parameters.
         """
-        # Local mean via uniform filter
-        local_mean = ndimage.uniform_filter(lst_celsius, size=window_size)
 
-        # Local variance: E[X²] - E[X]²
-        local_sq_mean = ndimage.uniform_filter(lst_celsius ** 2, size=window_size)
-        local_var = np.maximum(local_sq_mean - local_mean ** 2, 0.0)
-        local_std = np.sqrt(local_var)
+        if window_size is None:
+            window_size = ThermalConfig.LOCAL_WINDOW_SIZE
 
-        local_z = np.where(
-            local_std > 0.01,
-            (lst_celsius - local_mean) / local_std,
+        if z_threshold is None:
+            z_threshold = ThermalConfig.LOCAL_Z_THRESHOLD
+
+        if window_size < 3:
+            raise ValueError(
+                "LOCAL_WINDOW_SIZE must be at least 3."
+            )
+
+        if window_size % 2 == 0:
+            raise ValueError(
+                "LOCAL_WINDOW_SIZE must be odd."
+            )
+
+        lst = np.asarray(
+            lst_celsius,
+            dtype=np.float32,
+        )
+
+        self._validate_array(lst)
+
+        valid_mask = self._valid_mask(lst)
+
+        # -----------------------------------------------------
+        # Replace invalid pixels with zero temporarily.
+        # Their contribution is removed using valid-pixel count.
+        # -----------------------------------------------------
+
+        values = np.where(
+            valid_mask,
+            lst,
             0.0,
         ).astype(np.float32)
 
-        local_z   = np.nan_to_num(local_z, nan=0.0)
-        anomalies = local_z > z_threshold
-
-        logger.info(
-            "Local anomalies (window=%d): anomaly_px=%d",
-            window_size, int(np.sum(anomalies))
+        valid_float = valid_mask.astype(
+            np.float32
         )
 
-        return local_z, anomalies
+        # -----------------------------------------------------
+        # Local valid-pixel count
+        # -----------------------------------------------------
 
-    def compute_uhi_intensity(self, lst_celsius: np.ndarray,
-                               urban_mask: np.ndarray = None,
-                               rural_mask: np.ndarray = None):
+        local_count = ndimage.uniform_filter(
+            valid_float,
+            size=window_size,
+            mode="constant",
+            cval=0.0,
+        )
+
+        window_area = float(
+            window_size * window_size
+        )
+
+        local_count = (
+            local_count * window_area
+        )
+
+        # -----------------------------------------------------
+        # Local sum
+        # -----------------------------------------------------
+
+        local_sum = (
+            ndimage.uniform_filter(
+                values,
+                size=window_size,
+                mode="constant",
+                cval=0.0,
+            )
+            * window_area
+        )
+
+        # -----------------------------------------------------
+        # Local mean
+        # -----------------------------------------------------
+
+        local_mean = np.zeros_like(
+            lst,
+            dtype=np.float32,
+        )
+
+        has_neighbours = (
+            local_count > 0
+        )
+
+        local_mean[has_neighbours] = (
+            local_sum[has_neighbours]
+            / local_count[has_neighbours]
+        )
+
+        # -----------------------------------------------------
+        # Local squared mean
+        # -----------------------------------------------------
+
+        squared_values = np.where(
+            valid_mask,
+            lst ** 2,
+            0.0,
+        ).astype(np.float32)
+
+        local_sq_sum = (
+            ndimage.uniform_filter(
+                squared_values,
+                size=window_size,
+                mode="constant",
+                cval=0.0,
+            )
+            * window_area
+        )
+
+        local_sq_mean = np.zeros_like(
+            lst,
+            dtype=np.float32,
+        )
+
+        local_sq_mean[has_neighbours] = (
+            local_sq_sum[has_neighbours]
+            / local_count[has_neighbours]
+        )
+
+        # -----------------------------------------------------
+        # Local variance
+        # -----------------------------------------------------
+
+        local_variance = (
+            local_sq_mean
+            - local_mean ** 2
+        )
+
+        # Numerical precision can produce tiny negative values.
+        local_variance = np.maximum(
+            local_variance,
+            0.0,
+        )
+
+        local_std = np.sqrt(
+            local_variance
+        )
+
+        # -----------------------------------------------------
+        # Local Z-score
+        # -----------------------------------------------------
+
+        local_z = np.full(
+            lst.shape,
+            ThermalConfig.OUTPUT_NODATA,
+            dtype=np.float32,
+        )
+
+        valid_for_z = (
+            valid_mask
+            & has_neighbours
+            & (local_std > 1e-10)
+        )
+
+        local_z[valid_for_z] = (
+            (
+                lst[valid_for_z]
+                - local_mean[valid_for_z]
+            )
+            / local_std[valid_for_z]
+        ).astype(np.float32)
+
+        # -----------------------------------------------------
+        # Local hot anomaly
+        # -----------------------------------------------------
+
+        anomaly_mask = (
+            valid_for_z
+            & (local_z >= z_threshold)
+        )
+
+        logger.info(
+            "Local anomaly detection: "
+            "window=%dx%d, threshold=%.2fσ, "
+            "anomaly_px=%d",
+            window_size,
+            window_size,
+            z_threshold,
+            int(np.sum(anomaly_mask)),
+        )
+
+        statistics = {
+            "window_size": int(window_size),
+            "threshold": float(z_threshold),
+            "anomaly_pixels": int(
+                np.sum(anomaly_mask)
+            ),
+        }
+
+        return (
+            local_z,
+            anomaly_mask,
+            statistics,
+        )
+
+    # =========================================================
+    # HOTSPOT DETECTION
+    # =========================================================
+
+    def detect_hotspots(
+        self,
+        lst_celsius: np.ndarray,
+        min_area_pixels: int = None,
+        threshold_percentile: float = None,
+    ):
         """
-        Compute Urban Heat Island (UHI) intensity.
+        Detect thermal hotspots using connected-component analysis.
 
-        UHI = T_urban_mean - T_rural_mean
+        Method
+        ------
+        1. Calculate the selected percentile of valid LST.
+        2. Select pixels >= percentile threshold.
+        3. Apply 8-connected component analysis.
+        4. Remove components smaller than the minimum size.
+        5. Calculate statistics for retained components.
 
-        If masks are not provided, urban = top 20th percentile of temperature,
-        rural = bottom 20th percentile. This is the standard approach when
-        no land-cover map is available.
+        Parameters
+        ----------
+        lst_celsius:
+            2D LST array in degrees Celsius.
 
-        Args:
-            lst_celsius:  (rows, cols) LST in °C.
-            urban_mask:   (rows, cols) bool  True = urban pixel. Optional.
-            rural_mask:   (rows, cols) bool  True = rural pixel. Optional.
+        min_area_pixels:
+            Minimum number of pixels required for a hotspot.
+            Defaults to ThermalConfig.HOTSPOT_MIN_PIXELS.
 
-        Returns:
-            uhi_intensity: float  UHI magnitude in °C.
-            details:       dict   Component temperatures and classification.
+        threshold_percentile:
+            Percentile used to define hotspots.
+            Defaults to ThermalConfig.HOTSPOT_PERCENTILE.
+
+        Returns
+        -------
+        hotspot_map:
+            uint8 binary hotspot map.
+            1 = retained hotspot
+            0 = background.
+
+        hotspot_info:
+            List containing statistics for each retained hotspot.
+
+        statistics:
+            Overall hotspot statistics.
         """
-        valid = lst_celsius[(~np.isnan(lst_celsius)) & (lst_celsius != 0)]
 
-        if len(valid) < 10:
-            return 0.0, {'error': 'Insufficient valid pixels'}
+        if min_area_pixels is None:
+            min_area_pixels = (
+                ThermalConfig.HOTSPOT_MIN_PIXELS
+            )
 
-        if urban_mask is None or rural_mask is None:
-            p80 = float(np.percentile(valid, 80))
-            p20 = float(np.percentile(valid, 20))
-            urban_mask = lst_celsius > p80
-            rural_mask = lst_celsius < p20
+        if threshold_percentile is None:
+            threshold_percentile = (
+                ThermalConfig.HOTSPOT_PERCENTILE
+            )
 
-        urban_t = lst_celsius[urban_mask & (lst_celsius != 0) & ~np.isnan(lst_celsius)]
-        rural_t = lst_celsius[rural_mask & (lst_celsius != 0) & ~np.isnan(lst_celsius)]
+        lst = np.asarray(
+            lst_celsius,
+            dtype=np.float32,
+        )
 
-        if len(urban_t) == 0 or len(rural_t) == 0:
-            return 0.0, {'error': 'Could not separate urban/rural areas'}
+        self._validate_array(lst)
 
-        t_urban = float(np.mean(urban_t))
-        t_rural = float(np.mean(rural_t))
-        uhi = t_urban - t_rural
+        # -----------------------------------------------------
+        # Valid pixels
+        # -----------------------------------------------------
 
-        # Classify UHI severity
-        if   uhi > 5.0: classification = 'EXTREME'
-        elif uhi > 3.0: classification = 'STRONG'
-        elif uhi > 1.0: classification = 'MODERATE'
-        elif uhi > 0.0: classification = 'WEAK'
-        else:           classification = 'NONE'
+        valid_mask = self._valid_mask(lst)
 
-        details = {
-            'uhi_intensity_c':  round(uhi, 2),
-            'urban_mean_c':     round(t_urban, 2),
-            'rural_mean_c':     round(t_rural, 2),
-            'urban_pixels':     int(np.sum(urban_mask)),
-            'rural_pixels':     int(np.sum(rural_mask)),
-            'classification':   classification,
+        valid_values = lst[valid_mask]
+
+        if valid_values.size == 0:
+
+            logger.warning(
+                "Hotspot detection: no valid pixels."
+            )
+
+            empty_map = np.zeros(
+                lst.shape,
+                dtype=np.uint8,
+            )
+
+            statistics = {
+                "threshold_percentile": float(
+                    threshold_percentile
+                ),
+                "threshold_c": None,
+                "min_area_pixels": int(
+                    min_area_pixels
+                ),
+                "initial_hot_pixels": 0,
+                "initial_hot_area_km2": 0.0,
+                "initial_components": 0,
+                "final_hot_pixels": 0,
+                "final_hot_area_km2": 0.0,
+                "n_hotspots": 0,
+            }
+
+            return (
+                empty_map,
+                [],
+                statistics,
+            )
+
+        # -----------------------------------------------------
+        # Validate percentile
+        # -----------------------------------------------------
+
+        if not (
+            0.0
+            <= threshold_percentile
+            <= 100.0
+        ):
+            raise ValueError(
+                "threshold_percentile must be "
+                "between 0 and 100."
+            )
+
+        if min_area_pixels < 1:
+            raise ValueError(
+                "min_area_pixels must be at least 1."
+            )
+
+        # -----------------------------------------------------
+        # Percentile threshold
+        # -----------------------------------------------------
+
+        threshold = float(
+            np.percentile(
+                valid_values,
+                threshold_percentile,
+            )
+        )
+
+        logger.info(
+            "Hotspot threshold: %.4f°C (P%.0f)",
+            threshold,
+            threshold_percentile,
+        )
+
+        # -----------------------------------------------------
+        # Initial hot-pixel mask
+        # -----------------------------------------------------
+
+        hot_mask = (
+            valid_mask
+            & (lst >= threshold)
+        )
+
+        initial_hot_pixels = int(
+            np.sum(hot_mask)
+        )
+
+        # -----------------------------------------------------
+        # 8-connected component labeling
+        # -----------------------------------------------------
+
+        structure = np.ones(
+            (3, 3),
+            dtype=np.uint8,
+        )
+
+        labeled, n_features = ndimage.label(
+            hot_mask,
+            structure=structure,
+        )
+
+        logger.info(
+            "Initial hotspot components: %d",
+            n_features,
+        )
+
+        # -----------------------------------------------------
+        # Efficient component-size calculation
+        #
+        # np.bincount() is much faster than repeatedly
+        # evaluating:
+        #
+        #     labeled == component_id
+        #
+        # across the complete raster.
+        # -----------------------------------------------------
+
+        component_sizes = np.bincount(
+            labeled.ravel()
+        )
+
+        # Component 0 is background.
+        retained_ids = np.where(
+            component_sizes >= min_area_pixels
+        )[0]
+
+        retained_ids = retained_ids[
+            retained_ids != 0
+        ]
+
+        # -----------------------------------------------------
+        # Create final binary hotspot map
+        # -----------------------------------------------------
+
+        hotspot_map = np.isin(
+            labeled,
+            retained_ids,
+        ).astype(np.uint8)
+
+        final_hot_pixels = int(
+            np.sum(hotspot_map)
+        )
+
+        # -----------------------------------------------------
+        # Component information
+        #
+        # find_objects() gives bounding boxes for components.
+        # Therefore, we process only the small region occupied
+        # by each retained component rather than the entire
+        # raster.
+        # -----------------------------------------------------
+
+        hotspot_info = []
+
+        object_slices = ndimage.find_objects(
+            labeled
+        )
+
+        scene_mean = float(
+            np.mean(valid_values)
+        )
+
+        for component_id in retained_ids:
+
+            component_id = int(
+                component_id
+            )
+
+            index = (
+                component_id - 1
+            )
+
+            if (
+                index < 0
+                or index >= len(object_slices)
+            ):
+                continue
+
+            component_slice = (
+                object_slices[index]
+            )
+
+            if component_slice is None:
+                continue
+
+            rows, cols = component_slice
+
+            local_labels = labeled[
+                rows,
+                cols
+            ]
+
+            local_mask = (
+                local_labels == component_id
+            )
+
+            local_temperature = (
+                lst[
+                    rows,
+                    cols
+                ][local_mask]
+            )
+
+            if local_temperature.size == 0:
+                continue
+
+            # -------------------------------------------------
+            # Temperature statistics
+            # -------------------------------------------------
+
+            mean_temperature = float(
+                np.mean(
+                    local_temperature
+                )
+            )
+
+            max_temperature = float(
+                np.max(
+                    local_temperature
+                )
+            )
+
+            # -------------------------------------------------
+            # Centroid
+            # -------------------------------------------------
+
+            local_centroid = (
+                ndimage.center_of_mass(
+                    local_mask
+                )
+            )
+
+            centroid_row = int(
+                rows.start
+                + local_centroid[0]
+            )
+
+            centroid_col = int(
+                cols.start
+                + local_centroid[1]
+            )
+
+            # -------------------------------------------------
+            # Area
+            #
+            # Current project:
+            # 30 m Landsat thermal resolution.
+            # -------------------------------------------------
+
+            area_pixels = int(
+                component_sizes[
+                    component_id
+                ]
+            )
+
+            area_m2 = (
+                area_pixels
+                * 30.0
+                * 30.0
+            )
+
+            area_hectares = (
+                area_m2 / 10_000.0
+            )
+
+            hotspot_info.append(
+                {
+                    "id": component_id,
+
+                    "area_pixels": area_pixels,
+
+                    "area_hectares": round(
+                        area_hectares,
+                        4,
+                    ),
+
+                    "mean_temp_c": round(
+                        mean_temperature,
+                        4,
+                    ),
+
+                    "max_temp_c": round(
+                        max_temperature,
+                        4,
+                    ),
+
+                    "anomaly_c": round(
+                        mean_temperature
+                        - scene_mean,
+                        4,
+                    ),
+
+                    "centroid_row": (
+                        centroid_row
+                    ),
+
+                    "centroid_col": (
+                        centroid_col
+                    ),
+                }
+            )
+
+        # -----------------------------------------------------
+        # Overall hotspot statistics
+        # -----------------------------------------------------
+
+        pixel_area_m2 = (
+            30.0 * 30.0
+        )
+
+        hotspot_statistics = {
+
+            "threshold_percentile": float(
+                threshold_percentile
+            ),
+
+            "threshold_c": round(
+                threshold,
+                4,
+            ),
+
+            "min_area_pixels": int(
+                min_area_pixels
+            ),
+
+            "min_area_hectares": round(
+                min_area_pixels
+                * pixel_area_m2
+                / 10_000.0,
+                4,
+            ),
+
+            "initial_hot_pixels": (
+                initial_hot_pixels
+            ),
+
+            "initial_hot_area_km2": round(
+                initial_hot_pixels
+                * pixel_area_m2
+                / 1_000_000.0,
+                4,
+            ),
+
+            "initial_components": int(
+                n_features
+            ),
+
+            "final_hot_pixels": (
+                final_hot_pixels
+            ),
+
+            "final_hot_area_km2": round(
+                final_hot_pixels
+                * pixel_area_m2
+                / 1_000_000.0,
+                4,
+            ),
+
+            "n_hotspots": len(
+                hotspot_info
+            ),
         }
 
         logger.info(
-            "UHI: intensity=%.1f°C (%s), urban=%.1f°C, rural=%.1f°C",
-            uhi, classification, t_urban, t_rural
+            "Hotspots completed: "
+            "%d retained components, "
+            "%d pixels, %.4f km²",
+            len(hotspot_info),
+            final_hot_pixels,
+            hotspot_statistics[
+                "final_hot_area_km2"
+            ],
         )
 
-        return uhi, details
-
-    def detect_hotspots(self, lst_celsius: np.ndarray,
-                         min_area_pixels: int = 10,
-                         threshold_percentile: float = 95.0):
-        """
-        Detect thermal hotspots using connected component analysis.
-
-        Thresholds the temperature map at a high percentile, then labels
-        contiguous hot regions. Each labelled region is a hotspot.
-
-        Args:
-            lst_celsius:          (rows, cols) LST in °C.
-            min_area_pixels:      Minimum hotspot size in pixels (removes noise).
-            threshold_percentile: Temperature percentile used as hotspot threshold.
-
-        Returns:
-            hotspot_map:  (rows, cols) int  Labelled hotspot regions (0 = background).
-            hotspot_info: list of dicts describing each hotspot.
-        """
-        valid = lst_celsius[(~np.isnan(lst_celsius)) & (lst_celsius != 0)]
-
-        if len(valid) == 0:
-            return np.zeros_like(lst_celsius, dtype=np.int32), []
-
-        threshold = float(np.percentile(valid, threshold_percentile))
-        hot_mask  = lst_celsius > threshold
-
-        # Label connected regions of hot pixels
-        labeled, n_features = ndimage.label(hot_mask)
-
-        scene_mean = float(np.mean(valid))
-        hotspot_info = []
-
-        for i in range(1, n_features + 1):
-            region = labeled == i
-            area   = int(np.sum(region))
-
-            if area < min_area_pixels:
-                labeled[region] = 0   # Discard tiny blobs (noise)
-                continue
-
-            region_t = lst_celsius[region]
-            region_t = region_t[(region_t != 0) & ~np.isnan(region_t)]
-
-            if len(region_t) == 0:
-                continue
-
-            centroid = ndimage.center_of_mass(region.astype(float))
-
-            hotspot_info.append({
-                'id':            i,
-                'area_pixels':   area,
-                'mean_temp_c':   round(float(np.mean(region_t)), 2),
-                'max_temp_c':    round(float(np.max(region_t)), 2),
-                'anomaly_c':     round(float(np.mean(region_t)) - scene_mean, 2),
-                'centroid_row':  int(centroid[0]),
-                'centroid_col':  int(centroid[1]),
-            })
-
-        logger.info(
-            "Hotspots: %d detected above %.1f°C (p%.0f)",
-            len(hotspot_info), threshold, threshold_percentile
+        return (
+            hotspot_map,
+            hotspot_info,
+            hotspot_statistics,
         )
 
-        return labeled.astype(np.int32), hotspot_info
+    # =========================================================
+    # HELPER: ARRAY VALIDATION
+    # =========================================================
+
+    @staticmethod
+    def _validate_array(
+        array: np.ndarray,
+    ) -> None:
+        """
+        Validate a thermal raster.
+        """
+
+        if array.ndim != 2:
+
+            raise ValueError(
+                "LST raster must be a 2D array. "
+                f"Received shape: {array.shape}"
+            )
+
+        if array.size == 0:
+
+            raise ValueError(
+                "LST raster is empty."
+            )
+
+    # =========================================================
+    # HELPER: VALID PIXEL MASK
+    # =========================================================
+
+    @staticmethod
+    def _valid_mask(
+        lst_celsius: np.ndarray,
+    ) -> np.ndarray:
+        """
+        Return valid-pixel mask.
+
+        Current project convention:
+            0 = NoData
+
+        Invalid values:
+            NaN
+            +infinity
+            -infinity
+            0
+        """
+
+        valid = np.isfinite(
+            lst_celsius
+        )
+
+        valid &= (
+            lst_celsius
+            != ThermalConfig.INPUT_NODATA
+        )
+
+        return valid
+
+    # =========================================================
+    # HELPER: EMPTY FLOAT OUTPUT
+    # =========================================================
+
+    @staticmethod
+    def _empty_float_output(
+        shape,
+    ) -> np.ndarray:
+        """
+        Create an empty float32 raster using the configured
+        output NoData value.
+        """
+
+        return np.full(
+            shape,
+            ThermalConfig.OUTPUT_NODATA,
+            dtype=np.float32,
+        )
