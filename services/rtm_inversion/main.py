@@ -1,114 +1,179 @@
-# =============================================================
-# OWNER: LANKAPRIYA
-# =============================================================
-import os
-import logging
-import numpy as np
-import msgpack
-import zarr
-import tempfile
-import shutil
-from minio import Minio
-from kafka import KafkaConsumer
-from shared.kafka_helpers import create_reliable_producer, send_with_callback
-from shared.config import Settings
-from lut_prosail import PROSAILLookupTable  # We have this class already
+# ============================================================
+# RTM Inversion Service
+# ============================================================
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Reusable RTM inference engine
+
+
+import numpy as np
+import joblib
+
 
 class RTMInversionService:
-    def __init__(self):
-        self.consumer = KafkaConsumer(
-            'preprocessed',  # Switch to preprocessed to catch right after
-            bootstrap_servers=Settings.KAFKA_BOOTSTRAP_SERVERS,
-            value_deserializer=lambda m: msgpack.unpackb(m, raw=False),
-            group_id='rtm-inversion-group',
-            auto_offset_reset='earliest'
+
+    def __init__(
+        self,
+        model_path,
+        x_scaler_path,
+        y_scaler_path,
+        emit_bands_path,
+        target_parameters_path
+    ):
+        self.model = joblib.load(model_path)
+        self.x_scaler = joblib.load(x_scaler_path)
+        self.y_scaler = joblib.load(y_scaler_path)
+
+        self.emit_bands = np.asarray(
+            joblib.load(emit_bands_path),
+            dtype=float
         )
-        self.producer = create_reliable_producer(Settings.KAFKA_BOOTSTRAP_SERVERS)
-        self.minio = Settings.get_minio_client()
-        if not self.minio.bucket_exists("biophysical-params"):
-            self.minio.make_bucket("biophysical-params")
-        # Initialize LUT
-        self.lut = PROSAILLookupTable()  # This class must be in the same directory
 
-    def process(self):
-        logger.info("RTM inversion service started")
-        for msg in self.consumer:
-            try:
-                data = msg.value
-                scene_id = data['scene_id']
-                # We need the actual spectra. This example assumes we have them in the message or can load from Zarr.
-                # For brevity, we'll load preprocessed data again.
-                zarr_path = data.get('zarr_path')  # if provided in message
-                if not zarr_path:
-                    logger.warning("No zarr_path found, skipping")
-                    continue
+        self.target_parameters = list(
+            joblib.load(target_parameters_path)
+        )
 
-                local_dir = tempfile.mkdtemp()
-                try:
-                    local_zarr = os.path.join(local_dir, 'data.zarr')
-                    objects = self.minio.list_objects("preprocessed-data", prefix=zarr_path, recursive=True)
-                    for obj in objects:
-                        rel = os.path.relpath(obj.object_name, zarr_path)
-                        local_file = os.path.join(local_zarr, rel)
-                        os.makedirs(os.path.dirname(local_file), exist_ok=True)
-                        self.minio.fget_object("preprocessed-data", obj.object_name, local_file)
-                        
-                    z = zarr.open(local_zarr, mode='r')
-                    import dask.array as da
-                    dask_arr = da.from_zarr(z)
-                    wavelengths = z.attrs['wavelengths']
+    def predict(self, wavelengths_nm, reflectance):
 
-                    rows, cols, bands = dask_arr.shape
-                    chl_map = np.zeros((rows, cols))
-                    lai_map = np.zeros((rows, cols))
-                    water_map = np.zeros((rows, cols))
-                    unc_map = np.zeros((rows, cols))
+        wavelengths_nm = np.asarray(
+            wavelengths_nm,
+            dtype=float
+        ).reshape(-1)
 
-                    chunk_size = 256
-                    for i in range(0, rows, chunk_size):
-                        for j in range(0, cols, chunk_size):
-                            i_end = min(i + chunk_size, rows)
-                            j_end = min(j + chunk_size, cols)
-                            tile = dask_arr[i:i_end, j:j_end, :].compute()
-                            
-                            for ti in range(i_end - i):
-                                for tj in range(j_end - j):
-                                    spec = tile[ti, tj, :]
-                                    try:
-                                        result = self.lut.invert_fast(spec, wavelengths, k=3)
-                                        chl_map[i+ti, j+tj] = result['Chlorophyll_ug_cm2']
-                                        lai_map[i+ti, j+tj] = result['LAI']
-                                        water_map[i+ti, j+tj] = result['Water_content']
-                                        unc_map[i+ti, j+tj] = result['uncertainty']['Chlorophyll']
-                                    except Exception as e:
-                                        chl_map[i+ti, j+tj] = np.nan
+        reflectance = np.asarray(
+            reflectance,
+            dtype=float
+        ).reshape(-1)
 
-                    # Save results
-                    result_path = f"{scene_id}/biophysical.npz"
-                    temp_npz = os.path.join(local_dir, 'biophysical.npz')
-                    np.savez_compressed(temp_npz, chlorophyll=chl_map, lai=lai_map,
-                                        water=water_map, uncertainty=unc_map)
-                    self.minio.fput_object("biophysical-params", result_path, temp_npz)
+        if len(wavelengths_nm) != len(reflectance):
+            raise ValueError(
+                "Wavelength and reflectance arrays must have "
+                "the same length."
+            )
 
-                    out_msg = {
-                        'scene_id': scene_id,
-                        'params_path': result_path,
-                        'parameters': ['chlorophyll', 'lai', 'water', 'uncertainty'],
-                        'timestamp': data.get('timestamp')
-                    }
-                    send_with_callback(self.producer, 'rtm-results', out_msg)
-                    logger.info(f"RTM inversion complete for {scene_id}")
+        if not np.all(np.isfinite(wavelengths_nm)):
+            raise ValueError(
+                "Wavelength array contains NaN or infinite values."
+            )
 
-                except Exception as e:
-                    logger.error(f"Error processing RTM: {e}", exc_info=True)
-                finally:
-                    if 'local_dir' in locals() and os.path.exists(local_dir):
-                        shutil.rmtree(local_dir)
-            except Exception as e:
-                logger.error(f"Error handling message: {e}", exc_info=True)
+        if not np.all(np.isfinite(reflectance)):
+            raise ValueError(
+                "Reflectance array contains NaN or infinite values."
+            )
+
+        band_indices = np.array([
+            np.argmin(
+                np.abs(wavelengths_nm - band)
+            )
+            for band in self.emit_bands
+        ])
+
+        matched_reflectance = reflectance[
+            band_indices
+        ]
+
+        matched_reflectance = np.clip(
+            matched_reflectance,
+            0,
+            1
+        )
+
+        X = matched_reflectance.reshape(1, -1)
+
+        X_scaled = self.x_scaler.transform(X)
+
+        y_scaled = self.model.predict(
+            X_scaled
+        )
+
+        y = self.y_scaler.inverse_transform(
+            y_scaled
+        )
+
+        return {
+            parameter: float(y[0, i])
+            for i, parameter in enumerate(
+                self.target_parameters
+            )
+        }
+
+
+# REST API
+
+import os
+
+from flask import Flask, request, jsonify
+
+
+
+app = Flask(__name__)
+
+
+SAVE_DIR = os.environ.get("RTM_MODEL_DIR", "/models")
+
+
+rtm_service = RTMInversionService(
+    model_path=f"{SAVE_DIR}/rf_inversion_model.pkl",
+    x_scaler_path=f"{SAVE_DIR}/X_scaler_real.pkl",
+    y_scaler_path=f"{SAVE_DIR}/y_scaler_real.pkl",
+    emit_bands_path=f"{SAVE_DIR}/final_emit_bands.pkl",
+    target_parameters_path=f"{SAVE_DIR}/target_parameters.pkl"
+)
+
+
+@app.route("/health", methods=["GET"])
+def health():
+    return jsonify({
+        "service": "RTM Inversion Service",
+        "status": "healthy"
+    })
+
+
+@app.route("/predict", methods=["POST"])
+def predict():
+
+    try:
+        data = request.get_json()
+
+        if data is None:
+            raise ValueError(
+                "Request body must contain valid JSON."
+            )
+
+        if "wavelengths_nm" not in data:
+            raise ValueError(
+                "Missing required field: wavelengths_nm"
+            )
+
+        if "reflectance" not in data:
+            raise ValueError(
+                "Missing required field: reflectance"
+            )
+
+        result = rtm_service.predict(
+            wavelengths_nm=data["wavelengths_nm"],
+            reflectance=data["reflectance"]
+        )
+
+        return jsonify({
+            "service": "RTM Inversion Service",
+            "status": "success",
+            "retrieved_parameters": result
+        })
+
+    except Exception as e:
+
+        return jsonify({
+            "service": "RTM Inversion Service",
+            "status": "error",
+            "error": {
+                "type": type(e).__name__,
+                "message": str(e)
+            }
+        }), 400
+
 
 if __name__ == "__main__":
-    RTMInversionService().process()
+    app.run(
+        host="0.0.0.0",
+        port=8000
+    )
