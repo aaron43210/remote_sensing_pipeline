@@ -12,19 +12,20 @@ import dask.array as da
 import numpy as np
 import pytest
 
+import bands
 import handoff
 
 pytest.importorskip("dask.dataframe")
 
 
 def test_one_row_per_pixel_in_row_major_order():
-    rows, cols = 7, 5
-    image = np.arange(rows * cols * 10, dtype="f4").reshape(rows, cols, 10)
-    lazy = da.from_array(image, chunks=(3, 2, 10))          # awkward chunks
+    rows, cols, n = 7, 5, len(bands.TARGET_BANDS_NM)
+    image = np.arange(rows * cols * n, dtype="f4").reshape(rows, cols, n)
+    lazy = da.from_array(image, chunks=(3, 2, n))           # awkward chunks
 
     df = handoff.to_dask_dataframe(lazy).compute()
 
-    assert list(df.columns)[:2] == ["b450", "b680"] and len(df) == rows * cols
+    assert list(df.columns) == bands.column_names() and len(df) == rows * cols
     r, c = 4, 3
     np.testing.assert_array_equal(df.iloc[r * cols + c].values, image[r, c])
 
