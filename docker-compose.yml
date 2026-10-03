@@ -112,7 +112,7 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
     deploy:
-      replicas: 2
+      replicas: 4
     networks: [prod-net]
 
   ml_inference:

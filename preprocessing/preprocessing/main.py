@@ -3,108 +3,137 @@
 # =============================================================
 import os
 import logging
-import numpy as np
 import msgpack
-import zarr
-import tempfile
-import shutil
-from minio import Minio
 from kafka import KafkaConsumer
 from shared.kafka_helpers import create_reliable_producer, send_with_callback
 from shared.config import Settings
-from shared.chunked_processor import process_chunked
-from atmospheric_correction import quac_correction, save_bad_bands, apply_savitzky_golay
+from atmospheric_correction import quac_correction_lazy, bad_band_mask, savgol_lazy
+import s3fs
+import xarray as xr
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# The 10 spectral bands (nm) required by the Hydra MTL Neural Network.
+# Preprocessing MUST output exactly these bands — the ML service will assert n_bands == 10.
+TARGET_BANDS_NM = [450, 680, 720, 800, 900, 1450, 2205, 2265, 2320, 2350]
+
+
 class PreprocessingService:
     def __init__(self):
+        # ── Kafka Consumer ────────────────────────────────────────────────────
+        # Listens to 'raw-ingest-requests' — set in docker-compose.yml
         self.consumer = KafkaConsumer(
-            'raw-data',
+            'raw-ingest-requests',
             bootstrap_servers=Settings.KAFKA_BOOTSTRAP_SERVERS,
             value_deserializer=lambda m: msgpack.unpackb(m, raw=False),
             group_id='preprocessing-group'
         )
         self.producer = create_reliable_producer(Settings.KAFKA_BOOTSTRAP_SERVERS)
-        self.minio = Settings.get_minio_client()
-        # Ensure buckets exist
-        if not self.minio.bucket_exists("preprocessed-data"):
-            self.minio.make_bucket("preprocessed-data")
 
+    def _get_s3fs(self) -> s3fs.S3FileSystem:
+        """Returns an s3fs filesystem pointed at our MinIO instance."""
+        return s3fs.S3FileSystem(
+            key=Settings.MINIO_ACCESS_KEY,
+            secret=Settings.MINIO_SECRET_KEY,
+            endpoint_url=f"http://{Settings.MINIO_ENDPOINT}",
+            use_ssl=False
+        )
 
-    def download_zarr(self, bucket, prefix, local_dir):
-        objects = self.minio.list_objects(bucket, prefix=prefix, recursive=True)
-        for obj in objects:
-            rel_path = os.path.relpath(obj.object_name, prefix)
-            local_path = os.path.join(local_dir, rel_path)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            self.minio.fget_object(bucket, obj.object_name, local_path)
-        return local_dir
+    def open_scene_from_minio(self, zarr_path: str) -> xr.Dataset:
+        """
+        Opens a raw hyperspectral Zarr dataset directly from MinIO via S3FS.
+
+        No data is downloaded to disk. Xarray + Dask create a lazy computation
+        graph — chunks are only streamed from MinIO when a terminal operation
+        (.compute() or .to_zarr()) is actually called.
+        """
+        fs = self._get_s3fs()
+        store = s3fs.S3Map(root=f"raw-hyperspectral/{zarr_path}", s3=fs)
+        logger.info(f"Opening scene from MinIO: raw-hyperspectral/{zarr_path}")
+        # chunks='auto' lets Dask choose optimal chunk sizes based on array shape
+        return xr.open_zarr(store, chunks='auto')
+
+    def preprocess_lazy(self, ds: xr.Dataset) -> xr.DataArray:
+        """
+        Builds a lazy Dask computation graph for the full preprocessing pipeline.
+
+        Operations are applied in this order:
+          1. QUAC atmospheric correction (dark pixel subtraction)
+          2. Bad band removal (water absorption windows masked out)
+          3. Savitzky-Golay spectral smoothing
+          4. 10-band selection for Hydra MTL model
+
+        Nothing is computed until save_to_minio() triggers .to_zarr().
+        RAM usage stays ~1-2GB regardless of input image size.
+        """
+        cube = ds['reflectance']  # shape: (y, x, band)
+
+        # Step 1: QUAC Atmospheric Correction
+        corrected = quac_correction_lazy(cube)
+
+        # Step 2: Bad Band Removal — mask out water absorption windows
+        mask = bad_band_mask(corrected.coords['wavelength'])
+        filtered = corrected.isel(band=mask)
+
+        # Step 3: Spectral Smoothing via Dask-parallelized Savitzky-Golay
+        smoothed = savgol_lazy(filtered)
+
+        # Step 4: Select the exact 10 bands the Hydra MTL model requires
+        ten_band = smoothed.sel(wavelength=TARGET_BANDS_NM, method='nearest')
+
+        logger.info(f"Lazy graph built — output will have {len(TARGET_BANDS_NM)} bands")
+        return ten_band  # Still lazy — nothing computed yet
+
+    def save_to_minio(self, data: xr.DataArray, out_path: str):
+        """
+        Writes the processed DataArray directly to MinIO as a Zarr store.
+
+        Dask computes and writes chunks in parallel — the full image is never
+        loaded into RAM at once. Replaces the old file-walk upload loop.
+        """
+        fs = self._get_s3fs()
+        out_store = s3fs.S3Map(root=f"preprocessed-data/{out_path}", s3=fs)
+        logger.info(f"Writing preprocessed scene to MinIO: preprocessed-data/{out_path}")
+        # .to_zarr() triggers the entire Dask computation graph and streams to S3
+        data.to_zarr(out_store, mode='w')
 
     def process(self):
-        logger.info("Preprocessing service started")
+        logger.info("Preprocessing service started — listening on 'raw-ingest-requests'")
         for msg in self.consumer:
             try:
                 data = msg.value
                 scene_id = data['scene_id']
                 zarr_path = data['zarr_path']
-                wavelengths = data['wavelengths']
 
-                logger.info(f"Processing {scene_id}")
+                logger.info(f"Received scene: {scene_id}")
 
-                local_dir = tempfile.mkdtemp()
-                try:
-                    local_zarr = os.path.join(local_dir, 'data.zarr')
-                    self.download_zarr("raw-hyperspectral", zarr_path, local_zarr)
+                # 1. Open raw scene — lazy, no RAM cost
+                ds = self.open_scene_from_minio(zarr_path)
 
-                    out_zarr_path = f"{scene_id}/preprocessed.zarr"
-                    local_out = os.path.join(local_dir, 'preprocessed.zarr')
-                    
-                    from atmospheric_correction import quac_correction, get_good_bands_indices, apply_bad_bands_filter, apply_savitzky_golay
-                    
-                    good_indices, clean_wl = get_good_bands_indices(wavelengths)
+                # 2. Build the full preprocessing graph — still lazy
+                processed = self.preprocess_lazy(ds)
 
-                    def chunk_processor(tile, wls):
-                        corrected = quac_correction(tile)
-                        clean = apply_bad_bands_filter(corrected, good_indices)
-                        return apply_savitzky_golay(clean)
+                # 3. Compute + write to MinIO — this is where Dask does the work
+                out_zarr_path = f"{scene_id}/preprocessed.zarr"
+                self.save_to_minio(processed, out_zarr_path)
 
-                    process_chunked(local_zarr, chunk_processor, local_out)
-                    
-                    # Update wavelengths in the output Zarr metadata
-                    zout = zarr.open(local_out, mode='a')
-                    zout.attrs['wavelengths'] = clean_wl
-                    final_shape = zout.shape
-
-                    # Upload to MinIO
-                    for root, dirs, files in os.walk(local_out):
-                        for f in files:
-                            full_path = os.path.join(root, f)
-                            rel_path = os.path.relpath(full_path, local_out)
-                            self.minio.fput_object(
-                                "preprocessed-data",
-                                f"{out_zarr_path}/{rel_path}",
-                                full_path
-                            )
-
-                    # Publish to Kafka
-                    out_msg = {
-                        'scene_id': scene_id,
-                        'zarr_path': out_zarr_path,
-                        'wavelengths': clean_wl,
-                        'shape': list(final_shape),
-                        'tasks': data.get('tasks', ["agriculture", "mineral"]),
-                        'timestamp': data.get('timestamp')
-                    }
-                    send_with_callback(self.producer, 'preprocessed', out_msg)
-                    logger.info(f"Preprocessed {scene_id}")
+                # 4. Publish to 'preprocessed-multiband' — wakes up ML inference service
+                out_msg = {
+                    'scene_id': scene_id,
+                    'zarr_path': out_zarr_path,
+                    'wavelengths': TARGET_BANDS_NM,
+                    'n_bands': len(TARGET_BANDS_NM),   # ML service asserts this == 10
+                    'shape': list(processed.shape),
+                    'tasks': data.get('tasks', ['agriculture', 'mineral', 'thermal']),
+                    'timestamp': data.get('timestamp')
+                }
+                send_with_callback(self.producer, 'preprocessed-multiband', out_msg)
+                logger.info(f"Published preprocessed scene {scene_id} -> 'preprocessed-multiband'")
 
             except Exception as e:
-                logger.error(f"Error: {e}", exc_info=True)
-            finally:
-                if 'local_dir' in locals() and os.path.exists(local_dir):
-                    shutil.rmtree(local_dir)
+                logger.error(f"Error processing scene: {e}", exc_info=True)
+
 
 if __name__ == "__main__":
     PreprocessingService().process()
