@@ -7,7 +7,7 @@ Spectral smoothing (Savitzky-Golay).
 Removes detector noise along the spectral axis while preserving the shape
 and depth of absorption features -- which is exactly why we use SG here and
 not a moving average. A moving average would flatten the 2205 nm Al-OH and
-2350 nm carbonate features -- two of the network's 10 input bands.
+2350 nm carbonate features -- two of the network's input bands.
 
 PERFORMANCE NOTE (this is the core of the "lightweight" claim):
     The previous implementation looped over every pixel in Python and called

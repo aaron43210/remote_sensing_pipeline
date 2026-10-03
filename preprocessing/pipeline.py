@@ -5,7 +5,7 @@
 One scene end to end -- the file to read to understand this stage.
 
     input Zarr -> quality gate -> scene stats (once) -> Dask: per chunk
-    normalise, [haze], interpolate bad bands, smooth, keep 10 bands, clip
+    normalise, [haze], interpolate bad bands, smooth, keep target bands, clip
     -> preprocessed.zarr (+ multiband.npy) -> message
 
 Storage is passed in, so the same code runs on a local folder in the tests,
@@ -30,7 +30,8 @@ def prepare(in_store, source):
     Plan the work. Reads only a 1-in-16 sample; computes no output yet.
 
     Returns:
-        (ten_band, info) -- a lazy (rows, cols, 10) array and what was done.
+        (multiband, info) -- a lazy (rows, cols, n_bands) array and what
+        was done.
     """
     cube, attrs = lazy.open_cube(in_store)
     # The store's own axis wins over the message: it describes these pixels.
@@ -53,9 +54,9 @@ def prepare(in_store, source):
     return lazy.build(cube, wavelengths, stats, keep), info
 
 
-def write(ten_band, out_store, info, source):
+def write(multiband, out_store, info, source):
     """Compute chunk by chunk straight into the output Zarr."""
-    ten_band.to_zarr(out_store, overwrite=True)
+    multiband.to_zarr(out_store, overwrite=True)
     z = zarr.open_array(out_store, mode="r+")
     # Self-describing, so the store is usable without the Kafka message.
     z.attrs.update({
@@ -74,8 +75,8 @@ def run_scene(source, in_store, out_store, save_npy=None):
     save_npy: optional callable(array) -> key, for consumers that read a
     single .npy file (ml_inference today).
     """
-    ten_band, info = prepare(in_store, source)
-    z = write(ten_band, out_store, info, source)
+    multiband, info = prepare(in_store, source)
+    z = write(multiband, out_store, info, source)
 
     data_path = save_npy(np.asarray(z[:])) if save_npy else None
     return message.build(source, info, z.shape, data_path)

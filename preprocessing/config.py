@@ -51,7 +51,7 @@ SURFACE_REFLECTANCE_SOURCES = set(
 
 # ── Bad bands (nm) ───────────────────────────────────────────────────────
 # Water-vapour absorption cores: not retrievable, so INTERPOLATED, never
-# deleted. Note 1450 nm, one of the network's 10 bands, sits inside the first.
+# deleted. bands.py keeps every network input outside both.
 WATER_WINDOWS = [(1340.0, 1460.0), (1790.0, 1960.0)]
 WAVELENGTH_MIN = float(os.getenv("PREPROC_WL_MIN", "400.0"))
 WAVELENGTH_MAX = float(os.getenv("PREPROC_WL_MAX", "2450.0"))
