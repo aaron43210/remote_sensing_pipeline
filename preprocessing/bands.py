@@ -2,21 +2,33 @@
 # OWNER: ANANTAHANARAYANAN
 # =============================================================
 """
-The 10 bands the Hydra network reads, in the ONE order it reads them.
+The bands the Hydra network reads, in the ONE order it reads them.
 
 This list is the single source of truth. Before this file, ingestion put
 900 nm last and preprocessing put it fifth, so the network got its inputs
 in a different order depending on which path produced them.
 
-Override without a code change, e.g. to match the order the model was
-trained on:   PREPROC_TARGET_BANDS="450,680,720,800,900,1450,2205,2265,2320,2350"
+16 bands, chosen so one small model can serve agriculture AND minerals:
+
+    450 blue      550 green (chlorophyll)   680 red      720 red edge
+    800 NIR       860 iron oxide (hematite) 900 iron oxide (goethite)
+    970 leaf water                          1650 SWIR, crop water stress
+    2100 cellulose, crop residue            2165 + 2205 kaolinite doublet
+    2250 chlorite / epidote   2265 jarosite   2320 Mg-OH   2350 carbonate
+
+Every one is MEASURED: none sits inside a water-vapour window, where the
+value would be interpolated rather than seen. The old 1450 nm input was.
+
+Override without a code change, e.g. the original 10-band model:
+    PREPROC_TARGET_BANDS="450,680,720,800,900,1450,2205,2265,2320,2350"
 """
 
 import os
 
 import numpy as np
 
-_DEFAULT = "450,680,720,800,900,1450,2205,2265,2320,2350"
+_DEFAULT = ("450,550,680,720,800,860,900,970,"
+            "1650,2100,2165,2205,2250,2265,2320,2350")
 TARGET_BANDS_NM = tuple(
     float(v) for v in os.getenv("PREPROC_TARGET_BANDS", _DEFAULT).split(","))
 
@@ -26,7 +38,7 @@ MAX_GAP_NM = float(os.getenv("PREPROC_MAX_BAND_GAP_NM", "15"))
 
 
 def column_names(targets=TARGET_BANDS_NM):
-    """Stable names for the 10 features, e.g. 'b450' ... 'b2350'."""
+    """Stable names for the features, e.g. 'b450' ... 'b2350'."""
     return [f"b{int(round(t))}" for t in targets]
 
 
