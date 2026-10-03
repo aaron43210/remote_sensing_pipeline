@@ -5,8 +5,8 @@
 The contract with ingestion (in) and ml_inference (out), end to end.
 
 Runs pipeline.run_scene() on a Zarr laid out exactly like ingestion writes
-it, then checks what ml_inference will read: 10 bands, fixed order, 0..1,
-no NaN, data_path pointing at a matching .npy.
+it, then checks what ml_inference will read: the target bands, fixed order,
+0..1, no NaN, data_path pointing at a matching .npy.
 """
 
 import numpy as np
@@ -14,9 +14,12 @@ import pytest
 import zarr
 
 import bands
+import config
 import message
 import pipeline
 from conftest import write_like_ingestion
+
+N = len(bands.TARGET_BANDS_NM)
 
 
 @pytest.fixture
@@ -34,14 +37,15 @@ def result(tmp_path, raw_store, source):
 
 def test_output_is_what_the_network_reads(result):
     msg, z, npy = result
-    assert z.shape == (40, 40, 10) and msg["shape"] == [40, 40, 10]
-    assert msg["n_bands"] == 10 and msg["data_path"] == "EMIT_test/multiband.npy"
+    assert z.shape == (40, 40, N) and msg["shape"] == [40, 40, N]
+    assert msg["n_bands"] == N and msg["data_path"] == "EMIT_test/multiband.npy"
+    assert msg["band_names"] == bands.column_names()
     np.testing.assert_array_equal(npy, z[:])
     assert np.isfinite(npy).all() and npy.min() >= 0.0 and npy.max() <= 1.0
 
 
 def test_fill_pixel_is_zero_in_every_band(result):
-    """Documented no-data convention: all 10 bands 0."""
+    """Documented no-data convention: all bands 0."""
     _, z, _ = result
     assert not z[0, 0, :].any()
 
@@ -59,9 +63,16 @@ def test_bands_come_out_in_target_order(tmp_path, wavelengths, source):
     assert msg["band_names"][0] == "b450" and msg["data_path"] is None
 
 
-def test_message_flags_1450_as_interpolated_and_no_haze_removal(result):
+def test_every_target_band_is_measured_not_interpolated():
+    for nm in bands.TARGET_BANDS_NM:
+        assert config.WAVELENGTH_MIN <= nm <= config.WAVELENGTH_MAX, nm
+        for lo, hi in config.WATER_WINDOWS:
+            assert not lo <= nm <= hi, f"{nm} nm is inside water window {lo}-{hi}"
+
+
+def test_clean_scene_interpolates_no_target_and_skips_haze_removal(result):
     msg, _, _ = result
-    assert 1450.0 in msg["interpolated_bands"]
+    assert msg["interpolated_bands"] == []
     assert msg["dark_subtraction"] is False                  # EMIT is L2A
     assert msg["scene_id"] == "EMIT_test" and msg["bbox"] is not None
 

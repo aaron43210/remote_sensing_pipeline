@@ -9,7 +9,7 @@ IN  ('raw-data', from ingestion) -- ingestion's existing message, unchanged:
     bbox, timestamp
 
 OUT ('preprocessed-multiband', to ml_inference):
-    data_path   preprocessed-data/<data_path> = multiband.npy (rows, cols, 10)
+    data_path   preprocessed-data/<data_path> = multiband.npy (rows, cols, n_bands)
     zarr_path   preprocessed-data/<zarr_path> = same data, chunked, for Dask/Ray
     plus band_names, wavelengths, shape, quality -- see build()
 """
@@ -45,7 +45,8 @@ def encode(msg):
 def build(source, info, shape, data_path):
     """Assemble the outgoing message. Primitives only -- it is serialised."""
     n = len(bands.TARGET_BANDS_NM)
-    # The network asserts 10 inputs; fail here, not inside someone else's code.
+    # The network's input size must equal n_bands; fail here, not inside
+    # someone else's code.
     assert shape[2] == len(info["wavelengths"]) == n, (
         f"Contract violated: shape {shape}, {len(info['wavelengths'])} "
         f"wavelengths, {n} targets")

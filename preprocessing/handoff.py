@@ -2,18 +2,18 @@
 # OWNER: ANANTAHANARAYANAN
 # =============================================================
 """
-Handing the 10 bands to Ray, for the inference side.
+Handing the target bands to Ray, for the inference side.
 
 ray.data.from_dask() takes a Dask DATAFRAME. Preprocessing produces a 3-D
-ARRAY (rows, cols, 10). This is the one conversion between them:
+ARRAY (rows, cols, n_bands). This is the one conversion between them:
 
     import dask.array as da, ray
     from handoff import to_dask_dataframe, to_image
 
-    ten = da.from_zarr(store)                        # preprocessed.zarr
-    ds = ray.data.from_dask(to_dask_dataframe(ten))  # 1 row per pixel
+    cube = da.from_zarr(store)                        # preprocessed.zarr
+    ds = ray.data.from_dask(to_dask_dataframe(cube))  # 1 row per pixel
     ...predict...
-    image = to_image(predictions, ten.shape)         # back to a map
+    image = to_image(predictions, cube.shape)         # back to a map
 
 Rows are pixels in row-major order: pixel (r, c) is row r * cols + c.
 Columns are named after the target bands ('b450' ... 'b2350').
@@ -27,18 +27,18 @@ import numpy as np
 import bands
 
 
-def to_dask_dataframe(ten_band, names=None):
+def to_dask_dataframe(multiband, names=None):
     """(rows, cols, n) dask array -> dask dataframe, one row per pixel."""
     import dask.dataframe as dd
 
     names = list(names or bands.column_names())
-    rows, cols, n = ten_band.shape
+    rows, cols, n = multiband.shape
     if n != len(names):
         raise ValueError(f"{n} bands but {len(names)} column names")
 
     # reshape re-chunks so that whole image rows stay together, which keeps
     # the row-major pixel order.
-    return dd.from_dask_array(ten_band.reshape(rows * cols, n), columns=names)
+    return dd.from_dask_array(multiband.reshape(rows * cols, n), columns=names)
 
 
 def to_image(per_pixel, shape):

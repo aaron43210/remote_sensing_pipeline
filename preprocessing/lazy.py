@@ -2,11 +2,11 @@
 # OWNER: ANANTAHANARAYANAN
 # =============================================================
 """
-The Dask layer: raw cube in, 10 clean bands out, one chunk at a time.
+The Dask layer: raw cube in, clean target bands out, one chunk at a time.
 
     open_cube()    lazy view of the input Zarr, re-chunked (256, 256, ALL bands)
     scene_stats()  scale, haze and bad bands -- measured ONCE, from a sample
-    build()        map_blocks(clean_chunk) -> lazy (rows, cols, 10)
+    build()        map_blocks(clean_chunk) -> lazy (rows, cols, n_bands)
 
 Nothing is computed until the caller writes the result.
 

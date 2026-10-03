@@ -2,8 +2,8 @@
 
 **Owner:** Ananthanarayanan
 
-Turns a raw hyperspectral cube into the **10 clean bands** the Hydra network
-reads. It runs on Dask, chunk by chunk, so memory stays bounded whatever the
+Turns a raw hyperspectral cube into the **16 clean bands** the Hydra network
+reads, chosen to cover both agriculture and minerals. It runs on Dask, chunk by chunk, so memory stays bounded whatever the
 scene size. The folder is self-contained: it needs no `shared/` or `common/`.
 
 ```
@@ -20,10 +20,11 @@ raw-data ──▶ preprocessing ──▶ preprocessed-multiband ──▶ ml_i
 | Haze removal (dark-object subtraction) **only for raw radiance** | On EMIT L2A, which is already surface reflectance, it destroys signal: NDVI +0.25 → −0.21 on a real crop. |
 | Interpolate water-vapour bands (1340–1460, 1790–1960 nm) and low-SNR bands | Interpolated, never deleted, so band positions never shift. |
 | Savitzky-Golay smoothing (7/2) | Keeps the depth of the 2205 / 2350 nm absorption features. |
-| Keep the 10 target bands, clip to [0, 1] **last** | Smoothing can ring below 0; clipping earlier lets that through. |
+| Keep the 16 target bands, clip to [0, 1] **last** | Smoothing can ring below 0; clipping earlier lets that through. |
 
 Verified on a real EMIT L2A crop (276×277×285): 0.2 s, and identical to the
-earlier numpy pipeline (max difference 0).
+earlier numpy pipeline (max difference 0). With 16 bands on a 553×553 EMIT
+crop: 1.1 s, every target within 3 nm of a sensor band, none interpolated.
 
 ## Input: `raw-data`
 
@@ -44,21 +45,36 @@ Messages may be msgpack or JSON.
 
 | Field | Meaning |
 |---|---|
-| `data_path` | `preprocessed-data/<data_path>` = `multiband.npy`, (rows, cols, 10) float32, 0..1, no NaN. This is what `ml_inference` reads today. |
-| `zarr_path` | the same data as chunked Zarr `(256, 256, 10)`, for Dask/Ray |
+| `data_path` | `preprocessed-data/<data_path>` = `multiband.npy`, (rows, cols, 16) float32, 0..1, no NaN. This is what `ml_inference` reads today. |
+| `zarr_path` | the same data as chunked Zarr `(256, 256, 16)`, for Dask/Ray |
 | `band_names`, `target_nm`, `wavelengths` | `b450…b2350`, requested nm, actual sensor nm |
-| `n_bands`, `shape` | always 10; `[rows, cols, 10]` |
-| `interpolated_bands` | targets that were estimated, not measured (normally `[1450.0]`) |
+| `n_bands`, `shape` | 16 by default; `[rows, cols, n_bands]` |
+| `interpolated_bands` | targets that were estimated, not measured (normally `[]`) |
 | `dark_subtraction`, `quality` | what was applied; no-data fractions |
 
-**No data** = all 10 bands 0.
+**No data** = all bands 0.
 
 ## The band order
 
-`bands.py` holds the one list:
-`450, 680, 720, 800, 900, 1450, 2205, 2265, 2320, 2350`.
-To match the order the model was trained on without a code change, set:
-`PREPROC_TARGET_BANDS="..."`.
+`bands.py` holds the one list, every band measured (none in a water-vapour window):
+
+| Band (nm) | Used for |
+|---|---|
+| 450, 550, 680 | blue, green (chlorophyll), red |
+| 720, 800 | red edge, NIR (vegetation health, LAI) |
+| 860, 900 | iron oxides (hematite, goethite) |
+| 970, 1650 | leaf water, crop water stress |
+| 2100 | cellulose, crop residue |
+| 2165, 2205 | kaolinite doublet / Al-OH clays |
+| 2250, 2265 | chlorite / epidote, jarosite |
+| 2320, 2350 | Mg-OH, carbonate |
+
+It replaces the old 10-band list, whose 1450 nm input sat inside a
+water-vapour window and so was interpolated, not measured. To run the old
+model unchanged, set
+`PREPROC_TARGET_BANDS="450,680,720,800,900,1450,2205,2265,2320,2350"`.
+**The model's input size must equal `n_bands`.** See
+[NOTE_FOR_AARON.md](NOTE_FOR_AARON.md).
 
 ## Handing off to Ray
 
@@ -66,9 +82,9 @@ To match the order the model was trained on without a code change, set:
 `handoff.py` does the conversion (one row per pixel, row-major):
 
 ```python
-ten = da.from_zarr(store)                        # preprocessed.zarr
-ds = ray.data.from_dask(to_dask_dataframe(ten))
-image = to_image(predictions, ten.shape)         # back onto the map
+cube = da.from_zarr(store)                       # preprocessed.zarr
+ds = ray.data.from_dask(to_dask_dataframe(cube))
+image = to_image(predictions, cube.shape)        # back onto the map
 ```
 
 ## Landsat (`thermal/`)
@@ -91,8 +107,9 @@ Keep each scene's `_MTL.txt` and `_QA_PIXEL.TIF` beside its bands.
    Today it skips this stage. Its own `multiband.npy` is then redundant;
    this module writes that file.
 2. Add `raw-data` to `KAFKA_CREATE_TOPICS`, unless topic auto-creation is relied on.
-3. **1450 nm sits inside a water-vapour window**, so that input is interpolated.
-   Worth confirming with whoever trains the model.
+3. **ml_inference must expect 16 inputs.** Today it hard-codes 10 and silently
+   drops any extra bands, so it would read the wrong ones. The exact change is in
+   [NOTE_FOR_AARON.md](NOTE_FOR_AARON.md).
 
 ## Configuration
 
@@ -107,5 +124,5 @@ For AWS, set `S3_ENDPOINT_URL=""`.
 ```bash
 cd preprocessing
 pip install -r requirements.txt pytest
-python -m pytest tests/ -v          # 56 tests, ~2 s, no Kafka/MinIO needed
+python -m pytest tests/ -v          # 57 tests, ~2 s, no Kafka/MinIO needed
 ```
