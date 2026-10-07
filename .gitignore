@@ -43,5 +43,6 @@ models/
 *.h5
 *.hdf5
 *.pt
+!services/thermal/thermal_model_artifacts/thermal_model.pt
 *.pth
 *.pkl

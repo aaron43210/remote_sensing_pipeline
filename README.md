@@ -1,152 +1,113 @@
-# Scalable Physics-Based Hyperspectral Analysis Pipeline
+﻿# Thermal-Only Remote Sensing Model Handoff
 
-![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)
-![Architecture: Microservices](https://img.shields.io/badge/Architecture-Microservices-orange.svg)
-![ML: Physics-Guided](https://img.shields.io/badge/ML-Physics--Guided-success.svg)
+## Project Status
 
-A production-grade, distributed hyperspectral image processing system that prioritizes computational efficiency and physical interpretability over conventional deep learning approaches. 
+This repository contains a thermal-only, ROI-driven remote-sensing model pipeline for Landsat 9 ST_B10 data.
 
-This system implements a microservices architecture utilizing Apache Kafka for data streaming, Apache Spark for distributed processing, and MinIO for object storage. It combines the rigorous analytical power of the **PROSAIL Radiative Transfer Model (RTM)** with a highly optimized, **Physics-Guided Lightweight Neural Network** to achieve real-time, CPU-friendly biophysical parameter retrieval.
+The implementation is a **crop-based model handoff**, not a full-resolution production service. It includes a six-feature thermal training dataset, a PyTorch model, reusable feature extraction, validation tests, and inference support.
 
----
+## Owner
 
-## 🌟 Key Innovations
+- **Bainty Kaur** — implementation and model handoff
+- **Aaron** — repository recipient and reviewer
 
-1. **Physics-Informed Machine Learning (PIML):** Moves away from heavy, black-box Convolutional Neural Networks (CNNs). By extracting physical features (NDVI, Red Edge Position, Absorption Depths) deterministically, the downstream Neural Network only requires ~10,000 parameters. This enables blazing-fast CPU inference (<5ms per pixel) without requiring GPUs.
-2. **Big Data Engineering Paradigm:** Hyperspectral cubes are notoriously large and frequently cause Out-Of-Memory (OOM) errors. This pipeline converts raw `.hdr/.bil` files into **chunked Zarr** format and Cloud-Optimized GeoTIFFs (COG), allowing for spatial subsetting and windowed reading.
-3. **Event-Driven Microservices:** Processing is decoupled using **Apache Kafka**, allowing independent scaling of ingestion, atmospheric correction, spectral analysis, and ML inference stages.
-4. **Full-Lifecycle MLOps:** Integrated with MLflow for experiment tracking, Apache Airflow for automated model retraining, and Prometheus/Grafana for real-time drift detection and monitoring.
+## What Was Implemented
 
----
+- Extracts six local thermal features from ST_B10 rasters:
+  - LST
+  - Local mean
+  - Local standard deviation
+  - Local minimum
+  - Local maximum
+  - Local range
+- Uses ROI manifests to constrain feature extraction to the selected area.
+- Creates a four-class training dataset.
+- Trains and saves a PyTorch model.
+- Saves the StandardScaler used during preprocessing.
+- Reports validation metrics in JSON.
+- Provides inference for an input raster, ROI manifest, and model directory.
+- Includes focused tests for feature extraction and inference behavior.
 
-## 🏗️ System Architecture
+## Model Summary
 
-The pipeline is built on a containerized, event-driven Kubernetes microservices architecture.
+| Item | Value |
+|---|---:|
+| Training samples | 5,000 |
+| Features | 6 |
+| Classes | 4 |
+| Validation accuracy | 0.968 |
+| Model | PyTorch |
+| Input raster | Landsat ST_B10 |
+| Spatial scope | Crop-based ROI model |
+| Resolution | 30 m |
+| Study area | Bathinda District, Punjab, India |
 
-```mermaid
-graph TD
-    subgraph Data Ingestion & Storage
-        Raw[Raw Hyperspectral Data] --> Ingestion[Ingestion Service]
-        Ingestion -->|Writes Chunked Zarr| MinIO[(MinIO Object Storage)]
-        Ingestion -->|Publishes Event| Kafka[Apache Kafka]
-    end
+The model is intentionally limited to the training crop and local thermal statistics. It is not a full-resolution model.
 
-    subgraph Processing Microservices
-        Kafka -->|Topic: raw-data| Preprocessing[Preprocessing Service]
-        Preprocessing -->|Topic: preprocessed| Spectral[Spectral Analysis Service]
-        Spectral -->|Topic: analyzed| RTM[RTM Inversion Service]
-        Preprocessing -->|Topic: preprocessed| ML[ML Inference Service]
-    end
+### Thermal model and training data
 
-    subgraph Output & Analytics
-        RTM -->|Writes Results| MinIO
-        ML -->|Writes Results| MinIO
-        ML -->|Topic: ml-analyzed| Kafka
-        Kafka --> API[FastAPI Gateway]
-        API --> Dashboard[React Dashboard]
-    end
+- `services/thermal/thermal_training_six_feature.csv`
+- `services/thermal/thermal_model_artifacts/thermal_model.pt`
+- `services/thermal/thermal_model_artifacts/thermal_scaler.joblib`
+- `services/thermal/thermal_model_artifacts/thermal_model_metrics.json`
 
-    subgraph MLOps & Infrastructure
-        Redis[(Redis Cache)] --- API
-        Redis --- Drift[Drift Detection]
-        MLflow[MLflow Model Registry] --- ML
-        Prometheus[Prometheus Metrics] --- Preprocessing
-        Prometheus --- ML
-    end
+### Model implementation
+
+- `services/thermal/thermal_feature_pipeline.py`
+- `services/thermal/thermal_model_trainer.py`
+- `services/thermal/thermal_inference.py`
+- `services/thermal/thermal_entry_point.py`
+
+### Tests
+
+- `services/thermal/test_thermal_feature_pipeline.py`
+- `services/thermal/test_thermal_inference.py`
+
+### Existing thermal service files
+
+The existing tracked thermal service files remain part of the repository and should not be deleted:
+
+- `services/thermal/main.py`
+- `services/thermal/config.py`
+- `services/thermal/lst_calculator.py`
+- `services/thermal/emissivity.py`
+- `services/thermal/anomaly_detector.py`
+- `services/thermal/suhi.py`
+- `services/thermal/test_thermal.py`
+- `services/thermal/Dockerfile`
+- `services/thermal/requirements.txt`
+- `services/thermal/.dockerignore`
+
+## Run the Model
+
+The thermal-only entry point requires a raster path, ROI manifest, output CSV, and model output directory:
+
+```powershell
+python services/thermal/thermal_entry_point.py `
+  --manifest <path-to-roi-manifest.json> `
+  --raster <path-to-st-b10-raster.tif> `
+  --csv <path-to-output.csv> `
+  --model-output services/thermal/thermal_model_artifacts `
+  --epochs 20
 ```
 
----
+Inference can be performed with the provided inference module:
 
-## 📦 Component Breakdown
-
-### 1. Core Microservices (`/services`)
-*   **Ingestion (`/ingestion`)**: Validates raw data, chunks it into 256x256 Zarr tiles, and uploads to MinIO.
-*   **Preprocessing (`/preprocessing`)**: Performs dark object subtraction, flat-field correction, and Savitzky-Golay spectral smoothing.
-*   **Spectral Analysis (`/spectral_analysis`)**: Calculates analytical physics equations: First/Second Derivatives, Red Edge Position, Continuum Removal, and Absorption Depths.
-*   **RTM Inversion (`/rtm_inversion`)**: Utilizes Look-Up Tables (LUT) to invert the PROSAIL model, solving for biophysical parameters like LAI and chlorophyll concentration.
-*   **ML Inference (`/ml_inference`)**: Deploys the PyTorch-based `PhysicsGuidedLightweightNet`.
-*   **API Gateway (`/api_gateway`)**: FastAPI entry point featuring JWT authentication, rate limiting, and spatial subsetting (BBox).
-*   **Dashboard (`/dashboard`)**: Removed. Replaced by Frontend.
-*   **Frontend (`/frontend`)**: Real-time React SPA with rich aesthetics and interactive charting.
-
-### 2. MLOps (`/mlops` & `/monitoring`)
-*   **MLflow Tracking (`mlflow_tracking.py`)**: Logs model architectures, physics constraint losses, and prediction accuracy. Manages model promotion to production.
-*   **Airflow DAG (`airflow_dag.py`)**: Automated weekly pipeline that checks for model drift and triggers retraining if the KS-test threshold is breached.
-*   **Drift Detection (`drift_detection.py`)**: Monitors the statistical distribution of incoming spectra and predicted parameters against a reference baseline using Redis.
-*   **Prometheus & Alerting**: Exposes `/metrics` for processing times, Kafka lag, and physics consistency errors. Sends Slack/Email alerts on failure.
-
-### 3. Data Quality (`/data_quality`)
-*   **Validator (`validator.py`)**: Intercepts scenes before processing to evaluate Cloud Cover, Signal-to-Noise Ratio (SNR), NaN fractions, and sensor saturation.
-
-### 4. Infrastructure (`/infrastructure`)
-*   **Kubernetes Manifests (`/kubernetes`)**: Production deployments, Services (LoadBalancers), ConfigMaps, Secrets, and Horizontal Pod Autoscalers (HPA) targeting CPU/Memory utilization.
-
----
-
-## 🚀 Quick Start (Development)
-
-Requires **Docker** and **Docker Compose**.
-
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/your-org/hyperspectral-pipeline.git
-   cd hyperspectral-pipeline
-   ```
-
-2. **Start the development environment:**
-   ```bash
-   make dev-up
-   ```
-   This will spin up Kafka, Zookeeper, MinIO, Postgres, Redis, and all microservices.
-
-3. **Access Interfaces:**
-   * API Gateway Docs: [http://localhost:8000/docs](http://localhost:8000/docs)
-   * Frontend Dashboard: [http://localhost:8501](http://localhost:8501)
-   * MinIO Console: [http://localhost:9001](http://localhost:9001) (User/Pass: `minioadmin`)
-
----
-
-## 🏭 Production Deployment
-
-The production stack includes MLflow, Prometheus, Grafana, and highly-available container configurations.
-
-1. **Configure Environment:**
-   Review and update `.env.production` (especially `JWT_SECRET_KEY` and passwords).
-   ```bash
-   cp .env.example .env.production
-   ```
-
-2. **Build and Deploy:**
-   ```bash
-   make prod-build
-   make prod-up
-   ```
-
-3. **Kubernetes Deployment:**
-   If deploying to a K8s cluster (EKS, GKE, AKS):
-   ```bash
-   make k8s-deploy
-   ```
-
----
-
-## 🧪 Testing
-
-The system includes a robust suite of unit, integration, and load tests.
-
-```bash
-# Run Unit and Integration Tests (Pytest)
-make test-all
-
-# Run API Load Tests (Locust)
-make test-load
-
-# Run Physics-ML Benchmarks
-make benchmark
+```powershell
+python services/thermal/thermal_inference.py `
+  --raster <path-to-raster.tif> `
+  --manifest <path-to-roi-manifest.json> `
+  --output-dir <output-directory>
 ```
 
----
+## Validation
 
-## 📖 License
+The focused feature-pipeline and inference tests are the recommended validation set for this handoff. The model artifacts should be loaded before publishing to ensure that the `.pt` file and scaler are compatible with the installed PyTorch and scikit-learn versions.
 
-This project is licensed under the MIT License.
+## Important Notes
+
+1. The model is crop-based and uses local thermal statistics.
+2. The model is not intended to be a complete full-resolution remote-sensing system.
+3. The model is intentionally separated from the shared hyperspectral workflows.
+4. The validation accuracy value in the metrics file describes the completed training run and should be reviewed before any future retraining.
+5. The exact model and scaler versions should be maintained with the training environment used to generate them.
