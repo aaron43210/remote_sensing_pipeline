@@ -1,0 +1,23 @@
+{
+  "model_path": "thermal_model_artifacts\\thermal_model.pt",
+  "scaler_path": "thermal_model_artifacts\\thermal_scaler.joblib",
+  "validation_accuracy": 0.968,
+  "n_samples": 5000,
+  "n_features": 6,
+  "classes": [
+    "class_0",
+    "class_1",
+    "class_2",
+    "class_3"
+  ],
+  "feature_names": [
+    "lst",
+    "local_mean_3x3",
+    "local_std_3x3",
+    "local_min_3x3",
+    "local_max_3x3",
+    "local_range_3x3"
+  ],
+  "random_state": 42,
+  "epochs": 20
+}
