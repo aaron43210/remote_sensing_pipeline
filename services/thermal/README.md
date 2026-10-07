@@ -33,9 +33,7 @@ This folder contains a thermal-only, ROI-driven remote-sensing model pipeline fo
 | Resolution | 30 m |
 | Study area | Bathinda District, Punjab, India |
 
-> The model uses the training crop and local thermal statistics. It does not provide a complete API, Kafka, MinIO, frontend, or full-resolution inference workflow.
-
-## Files to Upload
+> The model uses the training crop and local thermal statistics.
 
 ### Model and training data
 
@@ -55,10 +53,6 @@ This folder contains a thermal-only, ROI-driven remote-sensing model pipeline fo
 
 - `test_thermal_feature_pipeline.py`
 - `test_thermal_inference.py`
-
-## Files Not Included
-
-Do not upload temporary or superseded files, including old Bathinda training CSVs, temporary raster fixtures, temporary alignment scripts, diagnostic plots, full-resolution training data, or unrelated API/Kafka/MinIO/frontend integration.
 
 ## Run the Model
 
@@ -83,11 +77,3 @@ python thermal_inference.py `
 ```powershell
 python -m unittest -v test_thermal_feature_pipeline.py test_thermal_inference.py
 ```
-
-## Important Notes
-
-1. The model is crop-based and uses local thermal statistics.
-2. The model is intentionally separate from the shared hyperspectral pipeline.
-3. The 0.968 validation accuracy belongs to the completed training run.
-4. Future retraining should regenerate the CSV, model, scaler, and metrics together.
-5. The exact PyTorch and scikit-learn versions used for training should be retained with the handoff.
