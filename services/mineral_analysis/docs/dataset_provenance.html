@@ -1,0 +1,965 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mineral Dataset Provenance</title>
+<style>
+  @page { size: A4; margin: 18mm 16mm 20mm 16mm; }
+  @page { @bottom-center { content: counter(page); } }
+
+  :root {
+    --ink: #16181d;
+    --muted: #5b6472;
+    --rule: #d8dde5;
+    --accent: #7a3b0f;
+    --accent-soft: #f6efe7;
+    --warn-bg: #fdf3e3;
+    --warn-rule: #c98a2e;
+    --ok-bg: #eef5ee;
+    --ok-rule: #4f7f52;
+    --code-bg: #f4f6f8;
+    --tbl-head: #2b3038;
+  }
+
+  html { font-size: 10.2pt; }
+  body {
+    font-family: "Segoe UI", "Calibri", system-ui, sans-serif;
+    color: var(--ink);
+    line-height: 1.5;
+    margin: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* ---------- cover ---------- */
+  .cover {
+    background: var(--tbl-head);
+    color: #f2f4f7;
+    padding: 26mm 14mm 20mm 14mm;
+    margin: -18mm -16mm 0 -16mm;
+    page-break-after: always;
+    min-height: 250mm;
+  }
+  .cover .kicker {
+    font-size: 8.5pt; letter-spacing: .18em; text-transform: uppercase;
+    color: #b9c2cf; margin-bottom: 10mm;
+  }
+  .cover h1 {
+    font-size: 30pt; line-height: 1.12; margin: 0 0 6mm 0; font-weight: 650;
+    letter-spacing: -.01em;
+  }
+  .cover h2 {
+    font-size: 12.5pt; font-weight: 400; color: #c9d1dc; margin: 0 0 22mm 0;
+    max-width: 150mm; line-height: 1.45;
+  }
+  .cover .meta {
+    border-top: 1px solid #4a515c; padding-top: 6mm; font-size: 9pt; color: #aab4c2;
+  }
+  .cover .meta div { margin-bottom: 2.2mm; }
+  .cover .meta b { color: #e8edf3; font-weight: 600; }
+  .cover .rule { height: 3px; width: 34mm; background: #c98a2e; margin: 0 0 10mm 0; }
+
+  /* ---------- structure ---------- */
+  h2.sec {
+    font-size: 15.5pt; margin: 0 0 4mm 0; padding-bottom: 2mm;
+    border-bottom: 2px solid var(--accent); color: var(--accent);
+    page-break-after: avoid;
+  }
+  h3 { font-size: 11.4pt; margin: 7mm 0 2mm 0; page-break-after: avoid; }
+  h4 { font-size: 10.2pt; margin: 5mm 0 1.5mm 0; page-break-after: avoid; color: #2e343d; }
+  p { margin: 0 0 2.6mm 0; }
+  .lead { font-size: 10.8pt; color: #2e343d; }
+  .muted { color: var(--muted); }
+  .small { font-size: 8.8pt; }
+  ul, ol { margin: 0 0 3mm 0; padding-left: 5.5mm; }
+  li { margin-bottom: 1.2mm; }
+
+  /* ---------- tables ---------- */
+  table {
+    width: 100%; border-collapse: collapse; margin: 2mm 0 4mm 0;
+    font-size: 8.7pt; page-break-inside: auto;
+  }
+  thead { display: table-header-group; }
+  tr { page-break-inside: avoid; }
+  th {
+    background: var(--tbl-head); color: #f2f4f7; text-align: left;
+    padding: 2.2mm 2.4mm; font-weight: 600; font-size: 8.4pt;
+  }
+  td { padding: 1.9mm 2.4mm; border-bottom: 1px solid var(--rule); vertical-align: top; }
+  tbody tr:nth-child(even) td { background: #f8f9fb; }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .kw { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.2pt; }
+
+  /* ---------- callouts ---------- */
+  .callout {
+    border-left: 3.5px solid var(--accent); background: var(--accent-soft);
+    padding: 3mm 4mm; margin: 3mm 0 4.5mm 0; font-size: 9.4pt;
+  }
+  .callout.warn { border-left-color: var(--warn-rule); background: var(--warn-bg); }
+  .callout.ok { border-left-color: var(--ok-rule); background: var(--ok-bg); }
+  .callout b { display: block; margin-bottom: 1.2mm; }
+
+  /* ---------- flow diagrams ---------- */
+  .flow { margin: 3mm 0 5mm 0; font-size: 9pt; }
+  .flow .box {
+    border: 1px solid #b9c2cf; background: #fbfcfd; border-radius: 2mm;
+    padding: 2.6mm 3.2mm; margin: 0 0 1.6mm 0;
+  }
+  .flow .box .t { font-weight: 600; }
+  .flow .box .d { color: var(--muted); font-size: 8.6pt; }
+  .flow .arrow { text-align: center; color: var(--muted); font-size: 9pt; line-height: 1; margin: 0 0 1.6mm 0; }
+  .flow .merge { display: flex; gap: 3mm; }
+  .flow .merge > .box { flex: 1; }
+
+  /* ---------- code ---------- */
+  pre {
+    background: var(--code-bg); border: 1px solid var(--rule); border-radius: 1.5mm;
+    padding: 3mm 3.5mm; font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 8.2pt; line-height: 1.42; overflow-x: auto; white-space: pre-wrap;
+    margin: 1.5mm 0 4mm 0; page-break-inside: avoid;
+  }
+  code { font-family: "Cascadia Mono", Consolas, monospace; font-size: 8.6pt; background: var(--code-bg); padding: .3mm 1mm; border-radius: 1mm; }
+
+  /* ---------- misc ---------- */
+  .toc { margin-top: 6mm; }
+  .toc ol { list-style: none; padding: 0; counter-reset: t; font-size: 10pt; }
+  .toc li { counter-increment: t; padding: 2.2mm 0; border-bottom: 1px solid var(--rule); }
+  .toc li::before { content: counter(t) ". "; color: var(--accent); font-weight: 700; }
+  .toc .pg { float: right; color: var(--muted); }
+  .pagebreak { page-break-before: always; }
+  .figure { margin: 3mm 0 4mm 0; }
+  .figure img { width: 100%; border: 1px solid var(--rule); border-radius: 1.5mm; }
+  .figure .cap { font-size: 8.4pt; color: var(--muted); margin-top: 1.6mm; }
+  footer.note { margin-top: 8mm; border-top: 1px solid var(--rule); padding-top: 3mm; font-size: 8.2pt; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============================ COVER ============================ -->
+<div class="cover">
+  <div class="kicker">Remote Sensing Pipeline &middot; Mineral Analysis Service</div>
+  <div class="rule"></div>
+  <h1>Mineral Dataset<br>Provenance &amp; Construction</h1>
+  <h2>The reference library, the real-image evaluation set, and the synthetic training set &mdash; where every number comes from, how each file was produced, and what you can and cannot conclude from it.</h2>
+  <div class="meta">
+    <div><b>Scope:</b> <span class="kw">data/usgs_library/*.csv</span>, <span class="kw">output/dataset/dataset_sample.csv</span>, <span class="kw">output/training_set/training_sample.csv</span></div>
+    <div><b>Generators:</b> <span class="kw">zarr_to_tif.py</span> &rarr; <span class="kw">main.py</span> &rarr; <span class="kw">rtm_inversion/build_dataset.py</span> / <span class="kw">rtm_inversion/synth.py</span></div>
+    <div><b>Source scene:</b> NASA EMIT L2A, 553&times;553&times;285 bands, EPSG:4326, bbox &minus;101.2,45.0,&minus;100.9,45.3</div>
+    <div><b>Document date:</b> 18 October 2026</div>
+  </div>
+</div>
+
+<!-- ============================ TOC ============================ -->
+<h2 class="sec">Contents</h2>
+<ol class="toc">
+  <li>Executive summary &mdash; the three artefacts at a glance</li>
+  <li>The reference library: <span class="kw">data/usgs_library/*.csv</span></li>
+  <li>The scene and the band grid: from zarr to 255 good bands</li>
+  <li>The reference maps: how SAM/SMA produce the labels</li>
+  <li>The feature transform: 255 + 7 + 12 + 1 = 275</li>
+  <li>The evaluation set: <span class="kw">dataset_sample.csv</span></li>
+  <li>The training set: <span class="kw">training_sample.csv</span></li>
+  <li>Side-by-side comparison and the assumptions behind each argument</li>
+  <li>Known limitations and what to do about them</li>
+  <li>Reproduction commands and file inventory</li>
+</ol>
+
+<div class="callout" style="margin-top:8mm">
+  <b>How to read this document</b>
+  Every figure quoted below is either read directly from a file in the repository or derived
+  by the generator code in the same repository. Where a number is a convention of the
+  implementation rather than a physical measurement, it is labelled as such. Nothing here is
+  estimated from a chart.
+</div>
+
+<!-- ============================ 1 ============================ -->
+<h2 class="sec pagebreak">1. Executive summary</h2>
+
+<p class="lead">The mineral analysis service produces two tabular datasets that look almost
+identical &mdash; both are 275-column feature matrices over the same 255 EMIT bands &mdash;
+but they answer different questions and carry different labels.</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:22%">Artefact</th>
+      <th style="width:26%">What the rows are</th>
+      <th style="width:20%">Source of the label</th>
+      <th style="width:32%">What it is for</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b><span class="kw">usgs_library/*.csv</span></b><br><span class="muted small">12 files, 441 rows each</span></td>
+      <td>One reference reflectance spectrum per mineral, 350&ndash;2550&nbsp;nm at 5&nbsp;nm spacing.</td>
+      <td>None &mdash; these <em>are</em> the endmembers every other stage is built on.</td>
+      <td>Endmembers for SAM, SMA, absorption-depth diagnostics and the synthetic forward model.</td>
+    </tr>
+    <tr>
+      <td><b><span class="kw">dataset_sample.csv</span></b><br><span class="muted small">2&nbsp;000 rows shown of 7&nbsp;702</span></td>
+      <td>Real EMIT pixels drawn from the scene, class-balanced across the classes SAM actually found.</td>
+      <td>SAM dominant mineral + SMA abundance vector from the normal pipeline.</td>
+      <td><b>Evaluation</b> set: apply a trained network and compare against the classical method.</td>
+    </tr>
+    <tr>
+      <td><b><span class="kw">training_sample.csv</span></b><br><span class="muted small">2&nbsp;000 rows shown of 62&nbsp;400</span></td>
+      <td>Simulated reflectance spectra from a constrained linear-mixing forward model &mdash; no pixel in the scene.</td>
+      <td>Ground truth by construction: the abundance vector was drawn before the spectrum was synthesised.</td>
+      <td><b>Training</b> set: balanced over all 12 minerals, so the network sees classes the scene cannot supply.</td>
+    </tr>
+  </tbody>
+</table>
+
+<h3>The single most important distinction</h3>
+<p>The evaluation set's labels are <b>pseudo-labels</b>: SAM and SMA were run on the real
+pixels first, and their output was written down as the target. A model that reproduces them
+has learned to imitate the classical pipeline on this scene &mdash; not to identify minerals
+against field truth. The training set has the opposite property: its labels are genuinely
+correct by construction, but its spectra are synthetic, so its realism depends entirely on
+how good the forward model and the library are.</p>
+
+<div class="callout warn">
+  <b>The library files are not genuine USGS measurements</b>
+  Despite the directory name and the <span class="kw">usgs_</span> prefix, the twelve CSVs are
+  generated by <span class="kw">spectral_library.generate_default_library_csvs()</span> from a
+  hard-coded table of Gaussian absorption features. Every value in them is a smooth
+  analytic curve plus a fixed pseudo-random noise draw. There is no USGS spectral ID, no
+  sample provenance, no grain size, no measurement geometry, and no true mineralogy behind
+  them. Section 2 documents this in full; Section 8 explains what it means for the validity
+  of the training set.
+</div>
+
+<!-- ============================ 2 ============================ -->
+<h2 class="sec pagebreak">2. The reference library: <span class="kw">data/usgs_library/*.csv</span></h2>
+
+<h3>2.1 File format</h3>
+<p>Each file is a small CSV with three metadata/header lines followed by data rows:</p>
+
+<pre># name: alunite
+# wavelength_unit: nm
+wavelength_nm,reflectance
+350.00,0.451685
+355.00,0.449832
+...
+2550.00,0.409527</pre>
+
+<p>The loader in [spectral_library.py](spectral_library.py) is deliberately strict about this
+layout. <span class="kw">load_spectrum_csv()</span> accepts optional <span class="kw"># key: value</span>
+comment lines, then finds the header row by looking for columns whose names start with
+<span class="kw">wavelength</span> and <span class="kw">reflectance</span>. The wavelength unit must be stated
+&mdash; via the function argument, a <span class="kw"># wavelength_unit:</span> line, or a column suffix such as
+<span class="kw">_nm</span> &mdash; and if more than one source states a unit they must agree, or the load fails.</p>
+
+<p>Validation at load time rejects a spectrum if any of the following is true: wavelengths are not
+strictly increasing, wavelengths are non-positive or non-finite, reflectance contains NaN/inf,
+reflectance falls outside the declared range (default <span class="kw">[0.0, 1.5]</span>), or the file contains USGS
+&ldquo;deleted channel&rdquo; sentinel values near &minus;1.23&times;10<sup>34</sup>. The class is
+[spectral_library.py:47](spectral_library.py#L47).</p>
+
+<h3>2.2 The twelve minerals</h3>
+<p>The library is fixed at twelve endmembers. Their order is alphabetical by filename, and this
+same order defines the class index everywhere downstream &mdash; in the SAM id map, in
+<span class="kw">y_class</span>, in the abundance columns, and in <span class="kw">class_names</span> in both
+schema files:</p>
+
+<table>
+  <thead>
+    <tr><th class="num" style="width:8%">Index</th><th style="width:22%">Mineral</th><th style="width:26%">Spectral group</th><th>Diagnostic absorption used by the pipeline</th></tr>
+  </thead>
+  <tbody>
+    <tr><td class="num">0</td><td>alunite</td><td>Sulfate / advanced argillic</td><td>Al&ndash;OH doublet ~2165 / 2320&nbsp;nm; sulfate ~1480 / 1770&nbsp;nm</td></tr>
+    <tr><td class="num">1</td><td>calcite</td><td>Carbonate</td><td>CO<sub>3</sub> ~2340&nbsp;nm, secondary ~2520&nbsp;nm</td></tr>
+    <tr><td class="num">2</td><td>chlorite</td><td>Fe/Mg phyllosilicate</td><td>Fe&ndash;OH ~2250&nbsp;nm; Mg&ndash;OH ~2320&nbsp;nm</td></tr>
+    <tr><td class="num">3</td><td>dolomite</td><td>Carbonate</td><td>CO<sub>3</sub> ~2320&nbsp;nm, secondary ~2520&nbsp;nm</td></tr>
+    <tr><td class="num">4</td><td>goethite</td><td>Iron oxide/hydroxide</td><td>Fe<sup>3+</sup> crystal field ~900&nbsp;nm; ~480&nbsp;nm</td></tr>
+    <tr><td class="num">5</td><td>gypsum</td><td>Sulfate / hydrated</td><td>H<sub>2</sub>O ~1450 / 1940&nbsp;nm; sulfate ~1750&nbsp;nm</td></tr>
+    <tr><td class="num">6</td><td>hematite</td><td>Iron oxide</td><td>Fe<sup>3+</sup> ~860&nbsp;nm; ~650&nbsp;nm</td></tr>
+    <tr><td class="num">7</td><td>illite</td><td>Al phyllosilicate</td><td>Al&ndash;OH ~2200&nbsp;nm; ~2350&nbsp;nm</td></tr>
+    <tr><td class="num">8</td><td>kaolinite</td><td>Al phyllosilicate</td><td>Al&ndash;OH doublet ~2165 / 2205&nbsp;nm</td></tr>
+    <tr><td class="num">9</td><td>montmorillonite</td><td>Smectite clay</td><td>Al&ndash;OH ~2210&nbsp;nm; H<sub>2</sub>O ~1420 / 1920&nbsp;nm</td></tr>
+    <tr><td class="num">10</td><td>muscovite</td><td>Mica</td><td>Al&ndash;OH ~2200&nbsp;nm; ~2350&nbsp;nm</td></tr>
+    <tr><td class="num">11</td><td>quartz</td><td>Tectosilicate</td><td>Very weak; ~1400 / 1900 / 2250&nbsp;nm</td></tr>
+  </tbody>
+</table>
+
+<h3>2.3 How each spectrum was actually generated</h3>
+<p>If the library directory is empty, <span class="kw">spectral_library.load_library()</span> calls
+<span class="kw">generate_default_library_csvs()</span>, which writes one CSV per entry in the
+<span class="kw">_DEFAULT_MINERAL_SPECS</span> table ([spectral_library.py:235](spectral_library.py#L235)).
+Each spectrum is built by <span class="kw">_build_mineral_spectrum()</span> as:</p>
+
+<pre>spectrum(λ) = base_reflectance
+            + slope · (λ − λ₀)
+            − Σᵢ depthᵢ · exp( −(λ − centerᵢ)² / (2·widthᵢ²) )
+            + N(0, 0.002)</pre>
+
+<p>The grid is <span class="kw">np.arange(350, 2551, 5)</span> &mdash; 441 samples at 5&nbsp;nm spacing &mdash;
+and the result is clipped to <span class="kw">[0.01, 0.95]</span>. The noise term uses a generator
+seeded from the base reflectance and slope, so the draw is deterministic and the files can be
+regenerated byte-for-byte.</p>
+
+<p>The table below is the complete parameter set behind the twelve files. It is the actual
+contents of <span class="kw">_DEFAULT_MINERAL_SPECS</span>, not a summary:</p>
+
+<table>
+  <thead>
+    <tr>
+      <th style="width:15%">Mineral</th>
+      <th class="num" style="width:9%">base</th>
+      <th class="num" style="width:9%">slope<br><span class="small muted">/nm</span></th>
+      <th>Gaussian absorptions (centre&nbsp;nm / width&nbsp;nm / depth)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>alunite</td><td class="num">0.45</td><td class="num">&minus;0.00002</td><td>2165/20/0.20 &middot; 2320/25/0.25 &middot; 1480/30/0.06 &middot; 1770/20/0.04</td></tr>
+    <tr><td>calcite</td><td class="num">0.50</td><td class="num">+0.00001</td><td>2340/30/0.35 &middot; 2520/20/0.15 &middot; 1420/30/0.03</td></tr>
+    <tr><td>chlorite</td><td class="num">0.25</td><td class="num">&minus;0.00005</td><td>2250/30/0.22 &middot; 2320/25/0.18 &middot; 1420/30/0.05 &middot; 1920/25/0.04</td></tr>
+    <tr><td>dolomite</td><td class="num">0.45</td><td class="num">+0.00001</td><td>2320/30/0.30 &middot; 2520/20/0.12 &middot; 1420/30/0.03</td></tr>
+    <tr><td>goethite</td><td class="num">0.22</td><td class="num">+0.00002</td><td>480/40/0.15 &middot; 900/80/0.28 &middot; 1920/60/0.05</td></tr>
+    <tr><td>gypsum</td><td class="num">0.55</td><td class="num">0.00000</td><td>1450/30/0.12 &middot; 1750/20/0.08 &middot; 1940/40/0.20 &middot; 2265/25/0.05</td></tr>
+    <tr><td>hematite</td><td class="num">0.20</td><td class="num">+0.00003</td><td>860/60/0.30 &middot; 650/40/0.10 &middot; 1920/80/0.05</td></tr>
+    <tr><td>illite</td><td class="num">0.30</td><td class="num">&minus;0.00004</td><td>2200/40/0.25 &middot; 2350/30/0.08 &middot; 1420/30/0.04 &middot; 1920/25/0.03</td></tr>
+    <tr><td>kaolinite</td><td class="num">0.35</td><td class="num">&minus;0.00003</td><td>2165/20/0.15 &middot; 2205/25/0.30 &middot; 1400/40/0.05 &middot; 1910/30/0.03</td></tr>
+    <tr><td>montmorillonite</td><td class="num">0.30</td><td class="num">&minus;0.00004</td><td>2210/40/0.20 &middot; 1420/50/0.10 &middot; 1920/50/0.15 &middot; 2350/30/0.05</td></tr>
+    <tr><td>muscovite</td><td class="num">0.32</td><td class="num">&minus;0.00003</td><td>2200/30/0.28 &middot; 2350/25/0.10 &middot; 1410/30/0.04</td></tr>
+    <tr><td>quartz</td><td class="num">0.55</td><td class="num">0.00000</td><td>1400/30/0.02 &middot; 1900/30/0.02 &middot; 2250/50/0.03</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <b>Consequence for every downstream result</b>
+  These spectra are <em>plausible</em>, not <em>measured</em>. The absorption centres are in the right
+  places for each mineral group, so SAM and SMA behave qualitatively the way they would with a
+  real library. But the shapes are idealised Gaussians with no overlapping minor features, no
+  continuum variability, no scattering slope from grain size, and no mixture components. Any
+  accuracy figure computed against these endmembers is a figure about <em>these twelve curves</em>,
+  not about the minerals in the ground.
+</div>
+
+<h3>2.4 How the library is aligned to the sensor</h3>
+<p>The library's native 5&nbsp;nm grid does not match the EMIT band centres. Alignment happens in
+two steps, and the order matters:</p>
+
+<ol>
+  <li><span class="kw">spectral_library.load_library()</span> first puts all twelve spectra onto a
+      common grid &mdash; it takes the wavelengths of the first spectrum as the reference and
+      linearly interpolates any spectrum that differs.</li>
+  <li><span class="kw">library_setup.load_aligned_library()</span> then calls
+      <span class="kw">wavelength_alignment.resample_spectra()</span> with <span class="kw">method="linear"</span>
+      to put the twelve spectra onto the 255 EMIT good-band wavelengths.</li>
+</ol>
+
+<p>Resampling is <b>one-directional</b>: library spectra are moved onto the sensor grid, never the
+reverse. [wavelength_alignment.py](wavelength_alignment.py) is explicit about this &mdash; spectra are
+compared by wavelength value, never by band number, so two sensors with different band counts
+cannot be silently confused. Targets are never extrapolated: a target wavelength outside a
+spectrum's valid range becomes NaN, and <span class="kw">load_aligned_library()</span> raises if any
+target wavelength (380.86&ndash;2492.78&nbsp;nm) falls outside the library range
+(350&ndash;2550&nbsp;nm). Here the library comfortably brackets the sensor, so no band is lost at
+this stage.</p>
+
+<!-- ============================ 3 ============================ -->
+<h2 class="sec pagebreak">3. The scene and the band grid</h2>
+
+<h3>3.1 Source data</h3>
+<p>Everything starts from a NASA EMIT Level-2A reflectance product delivered as a compressed
+zarr store: <span class="kw">real_emit.zarr/</span>, 553&times;553 pixels &times; 285 spectral bands,
+float32. [zarr_to_tif.py](zarr_to_tif.py) extracts it to the GeoTIFF
+<span class="kw">real_emit_multiband_cube.tif</span> (EPSG:4326, bbox &minus;101.2&ldots;&minus;100.9 longitude,
+45.0&ldots;45.3 latitude) and optionally to the flat binary <span class="kw">real_emit_good.bsq</span>.</p>
+
+<h3>3.2 Band selection: 285 &rarr; 255</h3>
+<p>[band_metadata.json](band_metadata.json) records, for each of the 285 bands, its index, its
+centre wavelength in nanometres, and a <span class="kw">good_quality</span> boolean. Exactly 255 are
+flagged good and 30 are not. Every stage &mdash; the normal pipeline, the feature extractor, the
+evaluation set and the training set &mdash; uses the same 255. The flag is read by
+<span class="kw">library_setup.emit_band_table()</span>:</p>
+
+<pre>wl, good = emit_band_table()
+good_idx = np.flatnonzero(good)          # 255 indices
+wl_good  = wl[good_idx]                  # 380.86 … 2492.78 nm</pre>
+
+<p>The 30 dropped bands cluster where the physics says they should: the deep atmospheric water
+vapour troughs. This shows up as two visible gaps in the feature grid, at roughly
+<b>1357&ndash;1416&nbsp;nm</b> and <b>1796&ndash;1974&nbsp;nm</b>, which is why the characteristic
+column names jump from <span class="kw">cr_1357.2nm</span> straight to <span class="kw">cr_1416.8nm</span>
+and from <span class="kw">cr_1796.3nm</span> to <span class="kw">cr_1974.5nm</span>. A smaller gap sits
+below 1975&nbsp;nm near the 1900&nbsp;nm water band. The masks are a property of the EMIT product
+and the scene's atmosphere, not of this code.</p>
+
+<h3>3.3 Geometry</h3>
+<table>
+  <thead><tr><th style="width:30%">Property</th><th>Value</th></tr></thead>
+  <tbody>
+    <tr><td>Raster size</td><td>553 &times; 553 = 305&nbsp;809 pixels</td></tr>
+    <tr><td>Band count</td><td>285 available, 255 used</td></tr>
+    <tr><td>Wavelength range used</td><td>380.8579 &ndash; 2492.7761&nbsp;nm</td></tr>
+    <tr><td>CRS</td><td>EPSG:4326 (geographic, degrees)</td></tr>
+    <tr><td>Pixel size</td><td>0.0005425&deg; &asymp; 60&nbsp;m at this latitude</td></tr>
+    <tr><td>Bounds</td><td>&minus;101.2, 45.0, &minus;100.9, 45.3</td></tr>
+    <tr><td>Scale/offset</td><td><b>Not applied</b> (<span class="kw">APPLY_SCALE_OFFSET = False</span>) &mdash; values are used as stored</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 4 ============================ -->
+<h2 class="sec pagebreak">4. The reference maps: how labels are made</h2>
+
+<p class="lead">The evaluation set has no external truth, so the labels are produced by running
+the classical methods on the scene. This section is the specification of that run; it is what
+the column <span class="kw">label_name</span> actually means.</p>
+
+<div class="flow">
+  <div class="box"><span class="t">1. Read the cube, keep 255 good bands</span><br>
+    <span class="d">raster_io.read_raster · no scale/offset</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">2. Align the library onto the 255 band wavelengths</span><br>
+    <span class="d">linear resample of 12 reference spectra, no extrapolation</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="merge">
+    <div class="box"><span class="t">3a. Continuum removal</span><br>
+      <span class="d">upper convex hull per spectrum, then divide</span></div>
+    <div class="box"><span class="t">3b. Continuum removal on endmembers</span><br>
+      <span class="d">same algorithm, computed once</span></div>
+  </div>
+  <div class="arrow">&#9660;</div>
+  <div class="merge">
+    <div class="box"><span class="t">4a. SAM on CR spectra</span><br>
+      <span class="d">angle to each of 12 endmembers; smallest wins; &gt;0.20 rad &rarr; unknown</span></div>
+    <div class="box"><span class="t">4b. SMA on original reflectance</span><br>
+      <span class="d">non-negative least squares, sum-to-one; RMSE &gt;0.10 flagged</span></div>
+  </div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">5. Quality score and three raster outputs</span><br>
+    <span class="d">mineral_classification.tif · mineral_abundance.tif · quality.tif</span></div>
+</div>
+
+<h3>4.1 Continuum removal</h3>
+<p>[continuum.py](continuum.py) implements the standard upper-convex-hull method. For one spectrum it
+fits the straight-line segments of the upper convex hull through the (wavelength, reflectance)
+points, interpolates that hull at every band, and divides:</p>
+
+<pre>continuum_removed(λ) = reflectance(λ) / continuum(λ)</pre>
+
+<p>The hull is found with a monotone-chain scan; a point is popped when the turn it makes with
+the previous two is not clockwise. The result is dimensionless, divided out so that soil
+albedo, topography and illumination largely cancel and the absorption bands remain. Because it
+is a ratio, values reach exactly 1.0 at hull vertices and fall below 1.0 inside absorption
+features &mdash; the evaluation script treats values above 1.01 as suspicious for that reason.</p>
+
+<p>Two implementation details matter for the data:</p>
+<ul>
+  <li>At least three finite bands are required; spectra with fewer come back all-NaN
+      (<span class="kw">MIN_VALID_BANDS = 3</span>).</li>
+  <li>NaN bands are excluded from the hull and the continuum is NaN there, so the divide never
+      manufactures a value by extrapolation.</li>
+</ul>
+
+<h3>4.2 SAM: the class label</h3>
+<p>[sam.py](sam.py) treats each spectrum as a vector and measures the angle between it and each
+endmember after normalising both to unit length:</p>
+
+<pre>θ(p, e) = arccos( (p · e) / (‖p‖ ‖e‖) )      in radians</pre>
+
+<p>Because both vectors are unit-normalised, brightness cancels &mdash; SAM is sensitive only to
+shape. In the normal pipeline it is run on the <b>continuum-removed</b> spectra
+(<span class="kw">SAM_USE_CONTINUUM_REMOVAL = True</span>), which additionally removes the overall
+slope. The class is the endmember with the smallest angle, with two sentinels: each pixel whose
+best angle exceeds <span class="kw">SAM_MAX_ANGLE = 0.20&nbsp;rad</span> (about 11.5&deg;) is labelled
+<i>unknown</i> (sentinel &minus;1), and a pixel with no computable angle at all is <i>invalid</i>
+(sentinel &minus;2).</p>
+
+<p>On the raster these become class ids: 0 means unclassified, and ids 1&ndash;12 map to minerals
+through <span class="kw">processing_metadata.json</span>, which records them explicitly:</p>
+
+<table>
+  <thead><tr><th class="num">id</th><th>Mineral</th><th class="num">id</th><th>Mineral</th><th class="num">id</th><th>Mineral</th><th class="num">id</th><th>Mineral</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>alunite</td><td class="num">4</td><td>dolomite</td><td class="num">7</td><td>hematite</td><td class="num">10</td><td>montmorillonite</td></tr>
+    <tr><td class="num">2</td><td>calcite</td><td class="num">5</td><td>goethite</td><td class="num">8</td><td>illite</td><td class="num">11</td><td>muscovite</td></tr>
+    <tr><td class="num">3</td><td>chlorite</td><td class="num">6</td><td>gypsum</td><td class="num">9</td><td>kaolinite</td><td class="num">12</td><td>quartz</td></tr>
+  </tbody>
+</table>
+
+<h3>4.3 SMA: the abundance label</h3>
+<p>[sma.py](sma.py) solves the linear mixture model</p>
+
+<pre>r = E · a + ε       subject to  aᵢ ≥ 0  and  Σ aᵢ = 1</pre>
+
+<p>where <span class="kw">E</span> is the 255&times;12 endmember matrix and <span class="kw">a</span> is the
+abundance vector. Non-negativity is enforced by <span class="kw">scipy.optimize.nnls</span>. The
+sum-to-one constraint is not a true equality constraint in this implementation: it is a single
+extra equation appended to the system, weighted by
+<span class="kw">SUM_WEIGHT &times; max|E|</span> with <span class="kw">SUM_WEIGHT = 1e3</span>. The
+consequence is visible in the data &mdash; abundance sums come out very close to 1 but not
+exactly 1. The recorded mean over 7&nbsp;702 samples is <b>0.9999989</b>.</p>
+
+<p>Crucially, <b>SMA runs on the original reflectance, not the continuum-removed spectra</b>. SAM
+and SMA are therefore looking at different representations of the same pixel, which is one
+reason their outputs do not always agree.</p>
+
+<p>Fit quality is recorded as the residual RMSE in input units. Pixels above
+<span class="kw">SMA_MAX_RMSE = 0.10</span> are treated as poorly modelled and are excluded from
+the dataset.</p>
+
+<h3>4.4 Quality score</h3>
+<p>[confidence.py](confidence.py) combines the SAM angle and SMA RMSE into a single heuristic in
+<span class="kw">[0, 1]</span>. The normal pipeline's own metadata is careful about what this is:
+<i>&ldquo;quality is a heuristic indicator, not a probability&rdquo;</i>. It is useful for sorting and
+thresholding; it is not calibrated against anything.</p>
+
+<h3>4.5 What the run actually found</h3>
+<p>The reference maps in <span class="kw">output/normal_sam/</span> were produced on
+2026-10-09. Their metadata records the outcome over all 305&nbsp;809 pixels:</p>
+
+<table>
+  <thead><tr><th style="width:40%">Pixel status</th><th class="num" style="width:20%">Count</th><th class="num" style="width:18%">Share</th><th>Note</th></tr></thead>
+  <tbody>
+    <tr><td>Classified (assigned a mineral)</td><td class="num">185&nbsp;105</td><td class="num">60.5%</td><td>passed the 0.20&nbsp;rad SAM threshold</td></tr>
+    <tr><td>Unknown</td><td class="num">120&nbsp;704</td><td class="num">39.5%</td><td>best angle &gt; 0.20&nbsp;rad</td></tr>
+    <tr><td>Invalid</td><td class="num">0</td><td class="num">0%</td><td>no NaN geometry in this scene</td></tr>
+  </tbody>
+</table>
+
+<p>But the classified pixels are <b>not spread across twelve minerals</b>. The dominant-mineral
+histogram in the evaluation set is two-valued: 5&nbsp;000 gypsum and 2&nbsp;702 quartz, and
+nothing else. Section 8.2 explains why this single fact is the largest limitation on what the
+evaluation set can measure.</p>
+
+<!-- ============================ 5 ============================ -->
+<h2 class="sec pagebreak">5. The feature transform</h2>
+
+<p class="lead">Both CSVs contain exactly 275 feature columns, and both are produced by the same
+class &mdash; <span class="kw">rtm_inversion/features.py:FeatureExtractor</span>. This is a deliberate
+design decision: the network is trained on synthetic spectra and applied to real pixels, so if
+the feature code differed by even one detail the model would face a distribution shift it
+cannot see.</p>
+
+<table>
+  <thead><tr><th class="num" style="width:8%">Columns</th><th style="width:20%">Count</th><th style="width:26%">Group</th><th>Definition</th></tr></thead>
+  <tbody>
+    <tr><td class="num">0&ndash;254</td><td class="num">255</td><td>Continuum-removed reflectance</td><td><span class="kw">cr_ωnm</span> &mdash; reflectance divided by its upper convex hull, per good band</td></tr>
+    <tr><td class="num">255&ndash;261</td><td class="num">7</td><td>Absorption depths</td><td><span class="kw">depth_KEY</span> &mdash; 1 &minus; min(CR) inside each diagnostic window, clipped to [0, 1]</td></tr>
+    <tr><td class="num">262&ndash;273</td><td class="num">12</td><td>SAM angles</td><td><span class="kw">sam_mineral</span> &mdash; spectral angle in radians to each CR endmember</td></tr>
+    <tr><td class="num">274</td><td class="num">1</td><td>Brightness</td><td><span class="kw">brightness</span> &mdash; mean reflectance across all good bands</td></tr>
+  </tbody>
+</table>
+
+<h3>5.1 The seven diagnostic windows</h3>
+<p>The depths come from <span class="kw">config.DIAGNOSTIC_FEATURES</span>, each a spectral window with a
+nominal centre and the minerals it is meant to flag:</p>
+
+<table>
+  <thead><tr><th style="width:14%">Key</th><th class="num" style="width:24%">Window (nm)</th><th class="num" style="width:12%">Centre</th><th>Physical basis and target minerals</th></tr></thead>
+  <tbody>
+    <tr><td>Al-OH</td><td class="num">2100&ndash;2300</td><td class="num">2205</td><td>Al&ndash;OH absorption doublet for clays, micas and sulfates &mdash; kaolinite, illite, muscovite, alunite, montmorillonite</td></tr>
+    <tr><td>Fe-OH</td><td class="num">2200&ndash;2330</td><td class="num">2265</td><td>Fe&ndash;OH absorption &mdash; chlorite (also jarosite, nontronite)</td></tr>
+    <tr><td>Mg-OH</td><td class="num">2250&ndash;2400</td><td class="num">2320</td><td>Mg&ndash;OH absorption &mdash; chlorite (also serpentine, talc)</td></tr>
+    <tr><td>CO3</td><td class="num">2300&ndash;2400</td><td class="num">2350</td><td>Carbonate radical &mdash; calcite, dolomite</td></tr>
+    <tr><td>Fe3+</td><td class="num">750&ndash;1050</td><td class="num">900</td><td>Fe<sup>3+</sup> crystal field / charge transfer &mdash; hematite, goethite</td></tr>
+    <tr><td>Fe2+</td><td class="num">900&ndash;1200</td><td class="num">1050</td><td>Fe<sup>2+</sup> crystal field transitions &mdash; chlorite</td></tr>
+    <tr><td>Sulfate</td><td class="num">1700&ndash;2300</td><td class="num">1940</td><td>Sulfate and hydration features &mdash; gypsum, alunite</td></tr>
+  </tbody>
+</table>
+
+<p>Note that the windows overlap heavily (Al&ndash;OH, Fe&ndash;OH and Mg&ndash;OH all cover the
+2200&ndash;2330&nbsp;nm region; sulfate spans 600&nbsp;nm). The depths are therefore correlated
+by construction, which is why the features are passed to a network rather than interpreted
+individually.</p>
+
+<h3>5.2 Order of operations</h3>
+<p><span class="kw">FeatureExtractor.transform()</span> does the work in this order, and the order is
+load-bearing:</p>
+<ol>
+  <li>Continuum-remove the incoming reflectance <b>once</b>; this array becomes columns 0&ndash;254.</li>
+  <li>Take the minimum of that same CR array inside each window and form 1&nbsp;&minus;&nbsp;min.</li>
+  <li>Compute SAM angles <b>on the CR spectra</b> against CR endmembers. The endmembers are
+      continuum-removed once in the constructor and cached.</li>
+  <li>Compute brightness from the <b>original</b> reflectance, not the CR version.</li>
+</ol>
+
+<!-- ============================ 6 ============================ -->
+<h2 class="sec pagebreak">6. The evaluation set: <span class="kw">dataset_sample.csv</span></h2>
+
+<h3>6.1 What it is</h3>
+<p>Produced by <span class="kw">rtm_inversion/build_dataset.py</span>. The inputs are the GeoTIFF cube and
+the three reference rasters from the normal pipeline. The output is
+<span class="kw">output/dataset/dataset.npz</span> plus the readable
+<span class="kw">dataset_sample.csv</span> (first 2&nbsp;000 rows), a schema and a stats file.</p>
+
+<h3>6.2 The selection algorithm, step by step</h3>
+<ol>
+  <li><b>Read the cube</b> with the same 255 good bands the normal run used. The band count is
+      checked against <span class="kw">band_metadata.json</span> and the build aborts on a mismatch.</li>
+  <li><b>Build endmembers and extractor</b> on the identical wavelength grid.</li>
+  <li><b>Read the reference maps</b> &mdash; class ids, the 12-band abundance stack, and quality
+      &mdash; and map the 1-based class ids back onto 0-based library indices via
+      <span class="kw">processing_metadata.json</span>. Unclassified pixels (id 0) are dropped.</li>
+  <li><b>Sample</b>. With <span class="kw">balanced=True</span> (the default), the cap is divided
+      evenly across the twelve minerals:
+      <div style="margin:2mm 0 2mm 0"><span class="kw">per_class = max_samples // 12 = 60&nbsp;000 // 12 = 5&nbsp;000</span></div>
+      For each class, up to 5&nbsp;000 members are drawn without replacement; classes with fewer
+      members contribute everything they have. The combined index list is then shuffled.</li>
+  <li><b>Extract features</b> for exactly those pixels and gather the matching labels, abundances
+      and quality values.</li>
+  <li><b>Drop non-finite rows</b> (rows where any feature is NaN).</li>
+  <li><b>Write</b> the npz, the 2&nbsp;000-row CSV, the schema and the stats.</li>
+</ol>
+
+<h3>6.3 Why there are 7&nbsp;702 rows</h3>
+<p>The cap is per class, not global. The scene classified 5&nbsp;000+ gypsum pixels and
+2&nbsp;702 quartz pixels and nothing else, so the balanced draw yields:</p>
+
+<pre>gypsum  → min(5000, 5 000) = 5 000
+quartz  → min(5000, 2 702) = 2 702
+                        total = 7 702</pre>
+
+<p>This is why <span class="kw">dataset.npz</span> has 7&nbsp;702 rows while the documented default is
+60&nbsp;000. The shortfall is not a bug in sampling; it is the scene running out of classes.</p>
+
+<h3>6.4 Column layout</h3>
+<table>
+  <thead><tr><th style="width:26%">Columns</th><th style="width:12%">Count</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><span class="kw">cr_*</span></td><td class="num">255</td><td>Continuum-removed reflectance per good band</td></tr>
+    <tr><td><span class="kw">depth_*</span></td><td class="num">7</td><td>Absorption depths in the seven diagnostic windows</td></tr>
+    <tr><td><span class="kw">sam_*</span></td><td class="num">12</td><td>Spectral angle in radians to each endmember</td></tr>
+    <tr><td><span class="kw">brightness</span></td><td class="num">1</td><td>Mean reflectance across good bands</td></tr>
+    <tr><td><span class="kw">label_index</span></td><td class="num">1</td><td>SAM dominant mineral as a 0&ndash;11 index into <span class="kw">class_names</span></td></tr>
+    <tr><td><span class="kw">label_name</span></td><td class="num">1</td><td>The same class as a string</td></tr>
+    <tr><td><span class="kw">abund_*</span></td><td class="num">12</td><td>SMA abundance fractions, same order as <span class="kw">class_names</span></td></tr>
+    <tr><td><span class="kw">quality</span></td><td class="num">1</td><td>Heuristic SAM/SMA confidence in [0, 1]</td></tr>
+  </tbody>
+</table>
+<p class="small muted">Total 289 columns. The <span class="kw">.npz</span> additionally stores pixel
+row/column/index for every retained sample, so predictions can be written back to the raster.</p>
+
+<h3>6.5 Recorded statistics</h3>
+<table>
+  <thead><tr><th class="num" style="width:34%">Statistic</th><th class="num" style="width:22%">Value</th><th>Reading</th></tr></thead>
+  <tbody>
+    <tr><td class="num">Samples</td><td class="num">7&nbsp;702</td><td>capped by the available classes, not by the 60&nbsp;k budget</td></tr>
+    <tr><td class="num">Features</td><td class="num">275</td><td>identical layout to the training set</td></tr>
+    <tr><td class="num">Feature NaN fraction</td><td class="num">0.0</td><td>every retained row is complete</td></tr>
+    <tr><td class="num">Class distribution</td><td class="num">gypsum 5&nbsp;000 · quartz 2&nbsp;702</td><td>the scene's classified mineralogy is degenerate</td></tr>
+    <tr><td class="num">Mean abundance sum</td><td class="num">0.9999989</td><td>sum-to-one weighting works as intended</td></tr>
+    <tr><td class="num">Mean quality</td><td class="num">0.0374</td><td>low &mdash; see the warning below</td></tr>
+  </tbody>
+</table>
+
+<div class="callout warn">
+  <b>Read the mean quality before trusting this set</b>
+  A mean quality of 0.037 on a 0&ndash;1 heuristic says that the pixels which passed the SAM
+  threshold are, on average, marginal fits. The build keeps every pixel below the 0.20&nbsp;rad
+  angle cutoff and does not filter on quality, so most rows here sit in the tail of the
+  angle distribution. This is consistent with the gypsum/quartz degeneracy: when the best
+  available match is still a poor match, the class is decided by whichever endmember happens
+  to be least bad.
+</div>
+
+<!-- ============================ 7 ============================ -->
+<h2 class="sec pagebreak">7. The training set: <span class="kw">training_sample.csv</span></h2>
+
+<h3>7.1 Why it is synthetic</h3>
+<p>The scene can only supply the minerals that physically occur in it &mdash; in practice two.
+Training a twelve-way classifier on two classes is impossible, and training a twelve-way
+<em>regressor</em> on two is meaningless. <span class="kw">rtm_inversion/synth.py</span> solves this by
+inverting the problem: draw an abundance vector first, then synthesise the spectrum it would
+produce from the library, so the label is exact by construction.</p>
+
+<div class="flow">
+  <div class="box"><span class="t">1. Choose how many endmembers mix, k &#8712; {1,2,3,4}</span><br>
+    <span class="d">probabilities 0.30 / 0.35 / 0.25 / 0.10</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">2. Choose which k endmembers, then draw abundances</span><br>
+    <span class="d">Dirichlet(1,…,1) over the chosen members — uniform on the simplex</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">3. Linear mixing</span><br>
+    <span class="d">r&#8320; = Σ aᵢ Eᵢ</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">4. Albedo nuisance</span><br>
+    <span class="d">r&#8321; = r&#8320; · U(0.6, 1.2)</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">5. Additive noise and clip</span><br>
+    <span class="d">σ ~ U(0.003, 0.015); r = clip(r&#8321; + N(0,σ), 0.001, 1.5)</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">6. Feature transform</span><br>
+    <span class="d">FeatureExtractor — identical to the real-image path</span></div>
+</div>
+
+<p>The forward model is deliberately the same linear mixture that SMA inverts:
+<span class="kw">aᵢ ≥ 0</span> and <span class="kw">Σaᵢ = 1</span>. The difference is that here the
+abundances are known exactly and are the regression target, whereas in the evaluation set they
+are estimated.</p>
+
+<h3>7.2 The two nuisances</h3>
+<p>Without them the network would learn the library and nothing else.</p>
+<ul>
+  <li><b>Brightness</b> (a multiplicative factor in 0.6&ndash;1.2) simulates albedo, shadow,
+      grain-size scattering and illumination differences. It is the same kind of variation
+      continuum removal is designed to remove, so the network sees it as a nuisance it should
+      be robust to.</li>
+  <li><b>Noise</b> (additive Gaussian with σ in 0.003&ndash;0.015 reflectance units) simulates
+      sensor noise and model residual.</li>
+</ul>
+<p>Neither is a physical radiative-transfer simulation. There is no multiple scattering, no
+non-linear mixing, no spatial blur, no atmospheric residual, and no endmember variability.</p>
+
+<h3>7.3 Balanced coverage of all twelve minerals</h3>
+<p>Pure Dirichlet mixing would produce an unbalanced dominant-class histogram and give few clean
+examples of anything. The generator therefore appends <span class="kw">pure_per_mineral = 200</span>
+spectra with abundance exactly 1.0 for each mineral, still carrying brightness and noise:</p>
+
+<pre>n_samples = 60 000  (mixed)
+          + 12 × 200 = 2 400  (pure)
+          ─────────────────────
+          = 62 400 rows</pre>
+
+<p>After shuffling and dropping non-finite rows, the stored set is still 62&nbsp;400 rows. The
+recorded dominant-class counts are close to uniform:</p>
+
+<table>
+  <thead><tr><th class="num">Mineral</th><th class="num">Count</th><th class="num">Mineral</th><th class="num">Count</th><th class="num">Mineral</th><th class="num">Count</th></tr></thead>
+  <tbody>
+    <tr><td class="num">alunite</td><td class="num">5&nbsp;194</td><td class="num">goethite</td><td class="num">5&nbsp;266</td><td class="num">kaolinite</td><td class="num">5&nbsp;134</td></tr>
+    <tr><td class="num">calcite</td><td class="num">5&nbsp;150</td><td class="num">gypsum</td><td class="num">5&nbsp;321</td><td class="num">montmorillonite</td><td class="num">5&nbsp;139</td></tr>
+    <tr><td class="num">chlorite</td><td class="num">5&nbsp;172</td><td class="num">hematite</td><td class="num">5&nbsp;045</td><td class="num">muscovite</td><td class="num">5&nbsp;326</td></tr>
+    <tr><td class="num">dolomite</td><td class="num">5&nbsp;237</td><td class="num">illite</td><td class="num">5&nbsp;251</td><td class="num">quartz</td><td class="num">5&nbsp;165</td></tr>
+  </tbody>
+</table>
+
+<p>Each mineral also appears as a minor component far more often than as the dominant one. The
+recorded mean number of endmembers with abundance above 0.05 is <b>1.949</b> per sample &mdash;
+consistent with the 0.30/0.35/0.25/0.10 mixture-count distribution, where roughly a third of
+samples are pure.</p>
+
+<h3>7.4 Column layout</h3>
+<table>
+  <thead><tr><th style="width:22%">Columns</th><th style="width:10%">Count</th><th>Meaning</th></tr></thead>
+  <tbody>
+    <tr><td><span class="kw">cr_*</span></td><td class="num">255</td><td>Continuum-removed reflectance per good band</td></tr>
+    <tr><td><span class="kw">depth_*</span></td><td class="num">7</td><td>Absorption depths in the seven windows</td></tr>
+    <tr><td><span class="kw">sam_*</span></td><td class="num">12</td><td>Spectral angle to each endmember</td></tr>
+    <tr><td><span class="kw">brightness</span></td><td class="num">1</td><td>Mean reflectance</td></tr>
+    <tr><td><span class="kw">abund_*</span></td><td class="num">12</td><td><b>True</b> abundance fractions &mdash; the primary regression target</td></tr>
+    <tr><td><span class="kw">dominant</span></td><td class="num">1</td><td>argmax of the abundance vector, as a string</td></tr>
+  </tbody>
+</table>
+<p class="small muted">Total 288 columns. The <span class="kw">.npz</span> additionally stores the
+simulated reflectance itself in a <span class="kw">spectra</span> array, for anyone who wants the
+pre-featurised spectra.</p>
+
+<h3>7.5 Recorded statistics</h3>
+<table>
+  <thead><tr><th class="num" style="width:34%">Statistic</th><th class="num" style="width:22%">Value</th><th>Reading</th></tr></thead>
+  <tbody>
+    <tr><td class="num">Samples</td><td class="num">62&nbsp;400</td><td>60&nbsp;000 mixed + 2&nbsp;400 pure</td></tr>
+    <tr><td class="num">Features</td><td class="num">275</td><td>identical layout to the evaluation set</td></tr>
+    <tr><td class="num">Minerals</td><td class="num">12</td><td>balanced, &asymp;5.2&nbsp;k dominant each</td></tr>
+    <tr><td class="num">Mean active endmembers</td><td class="num">1.949</td><td>abundance &gt; 0.05</td></tr>
+    <tr><td class="num">Source</td><td class="num">forward model</td><td>&ldquo;synthetic linear-mixing forward model from USGS library&rdquo;</td></tr>
+  </tbody>
+</table>
+
+<h3>7.6 The learnability check</h3>
+<p><span class="kw">rtm_inversion/validate_nn.py</span> trains a small scikit-learn MLP on a
+75/25 split and reports class agreement, macro-F1, and abundance R&sup2;/RMSE. Both directions
+have been run, and the contrast between them is the clearest single piece of evidence about the
+two sets:</p>
+
+<table>
+  <thead><tr><th style="width:34%">Metric</th><th class="num" style="width:22%">Training set</th><th class="num" style="width:22%">Evaluation set</th><th>Reading</th></tr></thead>
+  <tbody>
+    <tr><td>Train / test samples</td><td class="num">46&nbsp;800 / 15&nbsp;600</td><td class="num">5&nbsp;776 / 1&nbsp;926</td><td>75/25 split in both</td></tr>
+    <tr><td>Class agreement</td><td class="num">0.961</td><td class="num">0.997</td><td>both clear the 0.85 threshold</td></tr>
+    <tr><td>Class macro-F1</td><td class="num">0.961</td><td class="num">0.997</td><td>&mdash;</td></tr>
+    <tr><td>Abundance R&sup2;</td><td class="num">0.986</td><td class="num"><b>0.355</b></td><td>the decisive difference</td></tr>
+    <tr><td>Abundance RMSE</td><td class="num">0.0275</td><td class="num">0.0080</td><td>not comparable &mdash; different label scales</td></tr>
+    <tr><td>Classes in test</td><td class="num">all 12</td><td class="num">2 (gypsum, quartz)</td><td>&mdash;</td></tr>
+  </tbody>
+</table>
+
+<div class="callout">
+  <b>Why the evaluation set scores 0.997 on class but only 0.355 on abundance</b>
+  A two-class problem where one class dominates 65&ndash;35 is easy to get right, and the
+  near-perfect score mostly reflects that. The abundance R&sup2; of 0.355 is the honest number:
+  predicting a twelve-dimensional continuous mixture from 275 features on noisy, low-quality
+  real pixels recovers roughly a third of the variance. Reporting the 0.997 alone would
+  overstate what the pipeline can do by a wide margin.
+</div>
+
+<div class="callout warn">
+  <b>Neither report says anything about mineral identification accuracy</b>
+  Both validation reports describe a model reproducing SAM/SMA &mdash; the same classical method
+  that generated the labels. That is a consistency check (do the features carry the information
+  the labels encode?), not an accuracy claim. The report's own wording is
+  &ldquo;<em>the exported features reproduce the normal method</em>&rdquo;.
+</div>
+
+<!-- ============================ 8 ============================ -->
+<h2 class="sec pagebreak">8. Side-by-side comparison and what each set can support</h2>
+
+<h3>8.1 Structural comparison</h3>
+<table>
+  <thead>
+    <tr>
+      <th style="width:22%">Property</th>
+      <th style="width:39%"><span class="kw">dataset_sample.csv</span></th>
+      <th><span class="kw">training_sample.csv</span></th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr><td>Origin</td><td>Real EMIT pixels from the scene</td><td>Simulated spectra from a forward model</td></tr>
+    <tr><td>Generator</td><td><span class="kw">rtm_inversion/build_dataset.py</span></td><td><span class="kw">rtm_inversion/synth.py</span></td></tr>
+    <tr><td>Rows stored</td><td>7&nbsp;702</td><td>62&nbsp;400</td></tr>
+    <tr><td>Rows in the sample CSV</td><td>2&nbsp;000</td><td>2&nbsp;000</td></tr>
+    <tr><td>Columns</td><td>289 (275 features + 14 labels)</td><td>288 (275 features + 13 labels)</td></tr>
+    <tr><td>Feature columns</td><td colspan="2" style="text-align:center"><b>Identical</b> &mdash; same names, same order, same transform</td></tr>
+    <tr><td>Class column</td><td><span class="kw">label_index</span> + <span class="kw">label_name</span></td><td><span class="kw">dominant</span></td></tr>
+    <tr><td>Label source</td><td>SAM pseudo-label (estimated)</td><td>True abundance (known by construction)</td></tr>
+    <tr><td>Abundance source</td><td>SMA estimate, constrained NNLS</td><td>Dirichlet draw, exactly sums to 1</td></tr>
+    <tr><td>Abundance sums</td><td>&asymp;0.9999989 (weighted, not exact)</td><td>exactly 1.0 by construction</td></tr>
+    <tr><td>Quality column</td><td>Yes, mean 0.0374</td><td>No &mdash; not applicable</td></tr>
+    <tr><td>Classes present</td><td>2 of 12</td><td>12 of 12</td></tr>
+    <tr><td>Intended role</td><td><b>Evaluate</b></td><td><b>Train</b></td></tr>
+    <tr><td>Directory</td><td><span class="kw">output/dataset/</span></td><td><span class="kw">output/training_set/</span></td></tr>
+  </tbody>
+</table>
+
+<h3>8.2 What each set can and cannot support</h3>
+<p>This is the part that matters when results are written up.</p>
+
+<table>
+  <thead><tr><th style="width:36%">Claim</th><th style="width:32%">Training set</th><th>Evaluation set</th></tr></thead>
+  <tbody>
+    <tr><td>The features are learnable</td><td><b>Yes</b> &mdash; R&sup2; 0.986</td><td>Partly &mdash; class yes, abundance no (R&sup2; 0.355)</td></tr>
+    <tr><td>All twelve minerals are distinguishable</td><td><b>Yes, by construction</b></td><td><b>No</b> &mdash; only two occur in the labels</td></tr>
+    <tr><td>The network generalises to real pixels</td><td>Untestable here</td><td><b>Tested</b> &mdash; but against pseudo-labels</td></tr>
+    <tr><td>Results reflect true mineralogy</td><td>No &mdash; labels are synthetic truth</td><td>No &mdash; labels are SAM/SMA output</td></tr>
+    <tr><td>Results transfer to another scene</td><td>Plausibly, via features</td><td>Unknown</td></tr>
+    <tr><td>Accuracy is meaningful in absolute terms</td><td>Only for this forward model</td><td><b>No</b></td></tr>
+  </tbody>
+</table>
+
+<h3>8.3 The hidden dependency chain</h3>
+<p>Both sets inherit everything upstream of them. A defect anywhere in this chain propagates to
+both, and the validation reports cannot detect it because they compare the sets back to the same
+method that produced the labels:</p>
+
+<div class="flow">
+  <div class="box"><span class="t">Synthetic Gaussian library</span><br>
+    <span class="d">12 analysable curves, no real measurements</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">Endmembers on 255 EMIT wavelengths</span><br>
+    <span class="d">linear resample, no extrapolation</span></div>
+  <div class="arrow">&#9660;</div>
+  <div class="merge">
+    <div class="box"><span class="t">SAM / SMA on the real scene</span><br><span class="d">→ pseudo-labels (evaluation set)</span></div>
+    <div class="box"><span class="t">Linear-mixing forward model</span><br><span class="d">→ true labels (training set)</span></div>
+  </div>
+  <div class="arrow">&#9660;</div>
+  <div class="box"><span class="t">Identical 275-feature transform</span><br>
+    <span class="d">the one point where the two branches are deliberately joined</span></div>
+</div>
+
+<!-- ============================ 9 ============================ -->
+<h2 class="sec pagebreak">9. Known limitations</h2>
+
+<table>
+  <thead><tr><th class="num" style="width:6%">#</th><th style="width:26%">Limitation</th><th style="width:34%">Why it matters</th><th>Mitigation available in the repo</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td><b>Library is synthetic</b></td><td>Every accuracy figure is relative to twelve idealised Gaussians. Real library spectra differ in shape, minor features and continuum.</td><td>Replace the CSVs with genuine USGS/ECOSTRESS spectra; the loader already validates whatever is dropped in.</td></tr>
+    <tr><td class="num">2</td><td><b>Only two classes in the evaluation set</b></td><td>A twelve-way classifier cannot be evaluated. Macro-F1 of 0.997 is a two-class number.</td><td>Use <span class="kw">output/validation_synth/</span> for the twelve-class picture; treat the real set as a sanity check only.</td></tr>
+    <tr><td class="num">3</td><td><b>Evaluation labels are not truth</b></td><td>A perfect score means agreement with SAM/SMA, including their mistakes.</td><td>None in-repo. Requires field data or a better label source.</td></tr>
+    <tr><td class="num">4</td><td><b>Mean quality 0.037</b></td><td>Most retained evaluation pixels are marginal fits; the abundance R&sup2; of 0.355 reflects this.</td><td>Filter on <span class="kw">quality</span> before evaluating; re-run with a tighter <span class="kw">SAM_MAX_ANGLE</span>.</td></tr>
+    <tr><td class="num">5</td><td><b>SAM/SMA disagree by design</b></td><td>SAM runs on CR spectra, SMA on original reflectance. The class label and the abundance target describe the same pixel differently.</td><td>Train classification on <span class="kw">y_class</span> and regression on <span class="kw">y_abund</span> separately; do not assume they are consistent.</td></tr>
+    <tr><td class="num">6</td><td><b>Forward model is linear only</b></td><td>No non-linear mixing, no endmember variability, no spatial effects. Real intimate mixtures violate this.</td><td>Section 7.2 documents exactly what is and is not modelled.</td></tr>
+    <tr><td class="num">7</td><td><b>No scale/offset applied</b></td><td><span class="kw">APPLY_SCALE_OFFSET = False</span>, so values are whatever the product stores. If the source is scaled integers this would matter.</td><td>Verify the EMIT product's units before publication-grade work.</td></tr>
+    <tr><td class="num">8</td><td><b>Diagnostic windows overlap</b></td><td>Al&ndash;OH, Fe&ndash;OH and Mg&ndash;OH all cover 2200&ndash;2330&nbsp;nm; the seven depth features are correlated.</td><td>Expected for a network input; only a problem if individual depths are interpreted causally.</td></tr>
+  </tbody>
+</table>
+
+<!-- ============================ 10 ============================ -->
+<h2 class="sec pagebreak">10. Reproduction and file inventory</h2>
+
+<h3>10.1 Regeneration commands</h3>
+<p>Run from <span class="kw">services/mineral_analysis/</span> with the project's Python 3.13 interpreter.
+Note that <span class="kw">config</span> must be imported before <span class="kw">rasterio</span> &mdash; it
+sets <span class="kw">PROJ_DATA</span> to rasterio's bundled PROJ directory, without which CRS operations
+fail against the system PostgreSQL install.</p>
+
+<pre># 1. Extract the zarr store to a georeferenced cube
+python zarr_to_tif.py
+
+# 2. Run the classical pipeline → reference maps used as labels
+MINERAL_OUTPUT_DIR=output/normal_sam python main.py --good-bands-only
+
+# 3. Build the real-image EVALUATION set
+python rtm_inversion/build_dataset.py --normal-dir output/normal_sam
+
+# 4. Build the synthetic TRAINING set
+python rtm_inversion/synth.py --n-samples 60000
+
+# 5. Convert for the NN trainer
+python "rtm_inversion/NN Model/make_nn_dataset.py"
+
+# 6. Learnability checks
+python rtm_inversion/validate_nn.py
+
+# 7. Independent audits of all three artefacts
+python scripts/evaluate_data.py
+python scripts/deep_check.py</pre>
+
+<p>Or run steps 2&ndash;4 as one chain: <span class="kw">python -m rtm_inversion.run --good-bands-only</span>.</p>
+
+<h3>10.2 File inventory</h3>
+<table>
+  <thead><tr><th style="width:40%">Path</th><th class="num" style="width:10%">Size</th><th>Role</th></tr></thead>
+  <tbody>
+    <tr><td><span class="kw">data/usgs_library/*.csv</span></td><td class="num">12 files</td><td>441-row synthetic reference spectra, 350&ndash;2550&nbsp;nm</td></tr>
+    <tr><td><span class="kw">band_metadata.json</span></td><td class="num">285 bands</td><td>Wavelengths and good/bad flags</td></tr>
+    <tr><td><span class="kw">real_emit_multiband_cube.tif</span></td><td class="num">553&times;553&times;285</td><td>Extracted reflectance cube</td></tr>
+    <tr><td><span class="kw">output/normal_sam/*.tif</span></td><td class="num">3 rasters</td><td>Classification, abundance, quality</td></tr>
+    <tr><td><span class="kw">output/normal_sam/processing_metadata.json</span></td><td class="num">&mdash;</td><td>Class-id map, band selection, settings, pixel counts</td></tr>
+    <tr><td><b><span class="kw">output/dataset/dataset.npz</span></b></td><td class="num">7&nbsp;702 &times; 275</td><td>Evaluation arrays</td></tr>
+    <tr><td><b><span class="kw">output/dataset/dataset_sample.csv</span></b></td><td class="num">2&nbsp;000 &times; 289</td><td>Readable preview of the evaluation set</td></tr>
+    <tr><td><span class="kw">output/dataset/schema.json</span></td><td class="num">&mdash;</td><td>Column groups, targets, wavelengths, provenance</td></tr>
+    <tr><td><span class="kw">output/dataset/stats.json</span></td><td class="num">&mdash;</td><td>Class distribution, NaN fraction, quality mean</td></tr>
+    <tr><td><b><span class="kw">output/training_set/training_set.npz</span></b></td><td class="num">62&nbsp;400 &times; 275</td><td>Training arrays, plus the simulated spectra</td></tr>
+    <tr><td><b><span class="kw">output/training_set/training_sample.csv</span></b></td><td class="num">2&nbsp;000 &times; 288</td><td>Readable preview of the training set</td></tr>
+    <tr><td><span class="kw">output/training_set/schema.json</span>, <span class="kw">stats.json</span></td><td class="num">&mdash;</td><td>Layout and balance statistics</td></tr>
+    <tr><td><span class="kw">output/training_set/nn_dataset.npz</span></td><td class="num">&mdash;</td><td>NN-specific format from <span class="kw">make_nn_dataset.py</span></td></tr>
+    <tr><td><span class="kw">output/validation/</span>, <span class="kw">output/validation_synth/</span></td><td class="num">&mdash;</td><td>Learnability reports for each set</td></tr>
+  </tbody>
+</table>
+
+<h3>10.3 Source files referenced</h3>
+<table>
+  <thead><tr><th style="width:36%">File</th><th>Responsibility</th></tr></thead>
+  <tbody>
+    <tr><td><span class="kw">spectral_library.py</span></td><td>CSV parsing, validation, the synthetic spectrum generator, <span class="kw">load_library</span></td></tr>
+    <tr><td><span class="kw">wavelength_alignment.py</span></td><td>Linear/nearest resampling onto sensor wavelengths; no extrapolation</td></tr>
+    <tr><td><span class="kw">continuum.py</span></td><td>Upper convex hull continuum and division; <span class="kw">continuum_remove_many</span></td></tr>
+    <tr><td><span class="kw">sam.py</span></td><td>Spectral angle computation and classification with thresholds</td></tr>
+    <tr><td><span class="kw">sma.py</span></td><td>Constrained linear unmixing via NNLS with a weighted sum-to-one row</td></tr>
+    <tr><td><span class="kw">confidence.py</span></td><td>Heuristic SAM/SMA quality score</td></tr>
+    <tr><td><span class="kw">config.py</span></td><td>Paths, thresholds, diagnostic windows, wavelength presets, PROJ fix</td></tr>
+    <tr><td><span class="kw">rtm_inversion/library_setup.py</span></td><td>Band table from metadata; library alignment shared by every downstream step</td></tr>
+    <tr><td><span class="kw">rtm_inversion/features.py</span></td><td>The 275-feature transform, used on both real and synthetic spectra</td></tr>
+    <tr><td><span class="kw">rtm_inversion/build_dataset.py</span></td><td>Evaluation set construction and export</td></tr>
+    <tr><td><span class="kw">rtm_inversion/synth.py</span></td><td>Forward model, pure-sample augmentation, export</td></tr>
+    <tr><td><span class="kw">rtm_inversion/validate_nn.py</span></td><td>MLP learnability check used for both validation reports</td></tr>
+    <tr><td><span class="kw">scripts/evaluate_data.py</span></td><td>Independent structural audit of all three artefact groups</td></tr>
+    <tr><td><span class="kw">scripts/deep_check.py</span></td><td>Independent numeric audit (grids, ranges, abundance sums, label agreement)</td></tr>
+  </tbody>
+</table>
+
+<footer class="note">
+  Prepared from the repository state on 18 October 2026. All counts and statistics are read
+  from <span class="kw">schema.json</span>, <span class="kw">stats.json</span>,
+  <span class="kw">processing_metadata.json</span> and the validation reports in the paths named
+  above; all algorithm descriptions are taken from the cited source files. Where a number is a
+  design parameter rather than a measurement, it is identified as such in place.
+</footer>
+
+</body>
+</html>
