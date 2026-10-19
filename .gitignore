@@ -5,6 +5,7 @@ __pycache__/
 *.so
 .Python
 env/
+.venv/
 build/
 develop-eggs/
 dist/
@@ -36,8 +37,8 @@ docker-compose.override.yml
 *.swp
 *.swo
 
-# Data / Models
-data/
+# Data / Models / Generated Artifacts
+/data/
 datasets/raw/
 models/
 *.h5
@@ -45,3 +46,13 @@ models/
 *.pt
 *.pth
 *.pkl
+*.bsq
+*.tif
+*.tiff
+*.aux.xml
+*.zarr/
+*.npz
+output/
+nn_outputs/
+runs/
+Mineral Analysis/
