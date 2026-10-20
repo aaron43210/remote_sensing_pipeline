@@ -1,0 +1,126 @@
+{
+  "model": "HydraNet",
+  "architecture": "mlp",
+  "version": "v1",
+  "format": "onnx",
+  "opset": 17,
+  "file": "hydra.onnx",
+  "bytes": 1929560,
+  "parameters": 469390,
+  "feature_spec_hash": "f15dd48ca7cd4dd6",
+  "git_sha": "24cc04a",
+  "trained_to_reproduce": {
+    "mineral": "SAM class (0.20 rad -> unknown) + SMA/FCLS abundance + quality (services/mineral_analysis)",
+    "agriculture": "PROSAIL LUT inversion, k=20 inverse-distance (services/rtm_inversion approach)",
+    "thermal": "ThermalAnomalyDetector global/local z, UHI p80/p20, hotspot p95 (services/thermal)"
+  },
+  "onnx_vs_torch_max_abs_diff": {
+    "agri": 9.5367431640625e-05,
+    "mineral": 1.2218952178955078e-06,
+    "thermal": 1.1935830116271973e-05
+  },
+  "gates": {
+    "mineral_val.class_agreement": {
+      "value": 0.99951,
+      "threshold": 0.98,
+      "passed": true
+    },
+    "mineral_val.abundance_mae": {
+      "value": 0.0041,
+      "threshold": 0.03,
+      "passed": true
+    },
+    "mineral_val.quality_mae": {
+      "value": 0.00411,
+      "threshold": 0.03,
+      "passed": true
+    },
+    "mineral_real.class_agreement": {
+      "value": 0.9985,
+      "threshold": 0.97,
+      "passed": true
+    },
+    "mineral_real.abundance_mae": {
+      "value": 0.07822,
+      "threshold": 0.06,
+      "passed": false
+    },
+    "agri_val.r2_min_core": {
+      "value": 0.96887,
+      "threshold": 0.95,
+      "passed": true
+    },
+    "agri_csv.r2_min_core": {
+      "value": 0.97048,
+      "threshold": 0.95,
+      "passed": true
+    },
+    "thermal_val.global_agreement": {
+      "value": 0.99845,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_val.uhi_agreement": {
+      "value": 0.99935,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_val.hot_agreement": {
+      "value": 0.99964,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_val.local_agreement": {
+      "value": 0.99981,
+      "threshold": 0.99,
+      "passed": true
+    }
+  },
+  "all_gates_passed": false,
+  "train_args": {
+    "data": "artifacts/data",
+    "out": "artifacts/models",
+    "version": "v1",
+    "steps": 20000,
+    "batch": 512,
+    "lr": 0.002,
+    "eval_every": 2000,
+    "threads": 10,
+    "seed": 0,
+    "arch": "mlp"
+  },
+  "data_manifest": {
+    "spec_hash": "f15dd48ca7cd4dd6",
+    "seed": 42,
+    "mineral": {
+      "n": 202400,
+      "n_val": 20240,
+      "class_counts": {
+        "alunite": 13250,
+        "calcite": 10854,
+        "chlorite": 5617,
+        "dolomite": 13175,
+        "goethite": 6522,
+        "gypsum": 32990,
+        "hematite": 6457,
+        "illite": 5506,
+        "kaolinite": 8052,
+        "montmorillonite": 9353,
+        "muscovite": 11815,
+        "quartz": 55498,
+        "unknown": 23311
+      }
+    },
+    "agri": {
+      "n_lut": 100000,
+      "n_train": 200000,
+      "seconds": 36.7
+    },
+    "thermal": {
+      "n": 1445055,
+      "scenes": 400,
+      "val_scenes": 40
+    }
+  },
+  "created_at": "2026-10-20T05:30:13Z"
+}

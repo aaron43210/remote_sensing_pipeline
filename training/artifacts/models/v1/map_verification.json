@@ -1,0 +1,345 @@
+{
+  "model_version": "v1",
+  "feature_spec_hash": "f15dd48ca7cd4dd6",
+  "gates": {
+    "mineral_class": {
+      "metric": "pixel_agreement",
+      "value": 0.99957,
+      "threshold": 0.98,
+      "passed": true
+    },
+    "mineral_abundance": {
+      "metric": "mae",
+      "value": 0.0057,
+      "threshold": 0.03,
+      "passed": true
+    },
+    "mineral_quality": {
+      "metric": "mae",
+      "value": 0.00745,
+      "threshold": 0.03,
+      "passed": true
+    },
+    "agri_Cab": {
+      "metric": "nmae",
+      "value": 0.01624,
+      "threshold": 0.05,
+      "passed": true,
+      "r2_within_scene": 0.96
+    },
+    "agri_Cw": {
+      "metric": "nmae",
+      "value": 0.01444,
+      "threshold": 0.05,
+      "passed": true,
+      "r2_within_scene": 0.9827
+    },
+    "agri_LAI": {
+      "metric": "nmae",
+      "value": 0.03447,
+      "threshold": 0.05,
+      "passed": true,
+      "r2_within_scene": 0.7376
+    },
+    "thermal_global_class": {
+      "metric": "pixel_agreement",
+      "value": 0.99879,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_uhi_class": {
+      "metric": "pixel_agreement",
+      "value": 0.99855,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_local_anomaly": {
+      "metric": "pixel_agreement",
+      "value": 0.99969,
+      "threshold": 0.99,
+      "passed": true
+    },
+    "thermal_hotspots": {
+      "metric": "pixel_agreement",
+      "value": 0.99832,
+      "threshold": 0.99,
+      "passed": true
+    }
+  },
+  "all_passed": true,
+  "aggregate": {
+    "mineral_quality": {
+      "n": 4667,
+      "scenes": 8,
+      "mae": 0.007453253125831348,
+      "mae_worst_scene": 0.010894788429141045,
+      "r2": 0.9896953114738857,
+      "r2_worst_scene": 0.8990504741668701
+    },
+    "agri_Cw": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.0010104857673293804,
+      "mae_worst_scene": 0.0012314209016039968,
+      "r2": 0.982657733325006,
+      "r2_worst_scene": 0.9612274169921875,
+      "nmae": 0.014435510961848289
+    },
+    "mineral_abundance": {
+      "n": 56004,
+      "scenes": 8,
+      "mae": 0.005696609099033381,
+      "mae_worst_scene": 0.009265285916626453,
+      "r2": 0.9922428459075934,
+      "r2_worst_scene": 0.9849916696548462
+    },
+    "mineral_class": {
+      "n": 4667,
+      "scenes": 8,
+      "pixel_agreement": 0.999571459181487,
+      "pixel_agreement_worst_scene": 0.9986928104575163
+    },
+    "agri_Car": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 1.0961773888690014,
+      "mae_worst_scene": 1.248286247253418,
+      "r2": 0.842500617908916,
+      "r2_worst_scene": 0.6813549995422363,
+      "nmae": 0.03653924629563338
+    },
+    "agri_Cm": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.0009249409720635523,
+      "mae_worst_scene": 0.0012234762543812394,
+      "r2": 0.9683636144694968,
+      "r2_worst_scene": 0.8988415598869324,
+      "nmae": 0.018498819441271047
+    },
+    "agri_LAI": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.3447032839555282,
+      "mae_worst_scene": 0.37264955043792725,
+      "r2": 0.7376307570125057,
+      "r2_worst_scene": 0.49299150705337524,
+      "nmae": 0.03447032839555282
+    },
+    "agri_Cab": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 1.7858781737101839,
+      "mae_worst_scene": 2.178851842880249,
+      "r2": 0.960047107328318,
+      "r2_worst_scene": 0.8571473956108093,
+      "nmae": 0.016235256124638036
+    },
+    "agri_ALA": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 1.7433880254059306,
+      "mae_worst_scene": 2.270822525024414,
+      "r2": 0.977409187880719,
+      "r2_worst_scene": 0.9418250322341919,
+      "nmae": 0.019370978060065897
+    },
+    "thermal_local_anomaly": {
+      "n": 553312,
+      "scenes": 6,
+      "pixel_agreement": 0.9996891446417211,
+      "pixel_agreement_worst_scene": 0.998548714806334
+    },
+    "thermal_hotspots": {
+      "n": 553312,
+      "scenes": 6,
+      "pixel_agreement": 0.9983192123069805,
+      "pixel_agreement_worst_scene": 0.9916577977015942
+    },
+    "thermal_global_class": {
+      "n": 552123,
+      "scenes": 6,
+      "pixel_agreement": 0.9987883134736282,
+      "pixel_agreement_worst_scene": 0.9974004753416518
+    },
+    "thermal_uhi_class": {
+      "n": 552123,
+      "scenes": 6,
+      "pixel_agreement": 0.9985546698833412,
+      "pixel_agreement_worst_scene": 0.9941303576611733
+    }
+  },
+  "emit_synthetic": {
+    "scenes": 8,
+    "timing": [
+      {
+        "nn_s": 0.015,
+        "classical_s": 0.059,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.052,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.008,
+        "classical_s": 0.059,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.007,
+        "classical_s": 0.05,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.067,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.071,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.007,
+        "classical_s": 0.066,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.058,
+        "pixels": 9216
+      }
+    ]
+  },
+  "landsat_real": [
+    {
+      "scene": "fresno_city",
+      "landsat_id": "LC08_L2SP_043034_20240930_02_T1",
+      "acquired_at": "2024-09-30T18:39:43.070080Z",
+      "shape": [
+        306,
+        308
+      ],
+      "lst_c_p5_p95": [
+        36.4,
+        43.4
+      ],
+      "uhi_intensity_nn_c": 5.71,
+      "uhi_intensity_classical_c": 5.7,
+      "agreement": {
+        "thermal_global_class": 0.9974004753416518,
+        "thermal_uhi_class": 0.9996180290297937,
+        "thermal_hotspots": 0.9996710805534335,
+        "thermal_local_anomaly": 0.9999681690858161
+      }
+    },
+    {
+      "scene": "fresno_winter",
+      "landsat_id": "LC08_L2SP_042035_20240228_02_T1",
+      "acquired_at": "2024-02-28T18:34:06.538988Z",
+      "shape": [
+        305,
+        306
+      ],
+      "lst_c_p5_p95": [
+        22.2,
+        27.3
+      ],
+      "uhi_intensity_nn_c": 4.17,
+      "uhi_intensity_classical_c": 4.17,
+      "agreement": {
+        "thermal_global_class": 0.9986529301463457,
+        "thermal_uhi_class": 0.999353406470246,
+        "thermal_hotspots": 0.9993464052287582,
+        "thermal_local_anomaly": 0.9997857066323798
+      }
+    },
+    {
+      "scene": "bakersfield_oil",
+      "landsat_id": "LC09_L2SP_042035_20240830_02_T1",
+      "acquired_at": "2024-08-30T18:33:53.353894Z",
+      "shape": [
+        302,
+        309
+      ],
+      "lst_c_p5_p95": [
+        43.1,
+        52.2
+      ],
+      "uhi_intensity_nn_c": 7.8,
+      "uhi_intensity_classical_c": 7.81,
+      "agreement": {
+        "thermal_global_class": 0.999292740950299,
+        "thermal_uhi_class": 0.9995606421054888,
+        "thermal_hotspots": 0.9996570865213571,
+        "thermal_local_anomaly": 0.9999249876765468
+      }
+    },
+    {
+      "scene": "sacramento",
+      "landsat_id": "LC09_L2SP_044033_20240929_02_T1",
+      "acquired_at": "2024-09-29T18:45:35.078619Z",
+      "shape": [
+        301,
+        295
+      ],
+      "lst_c_p5_p95": [
+        27.7,
+        36.9
+      ],
+      "uhi_intensity_nn_c": 7.81,
+      "uhi_intensity_classical_c": 7.82,
+      "agreement": {
+        "thermal_global_class": 0.9993760068979601,
+        "thermal_uhi_class": 0.9992398629484242,
+        "thermal_hotspots": 0.9998648572554761,
+        "thermal_local_anomaly": 0.999943690523115
+      }
+    },
+    {
+      "scene": "tulare_farms",
+      "landsat_id": "LC09_L2SP_042035_20240729_02_T1",
+      "acquired_at": "2024-07-29T18:33:34.994113Z",
+      "shape": [
+        303,
+        307
+      ],
+      "lst_c_p5_p95": [
+        30.4,
+        49.2
+      ],
+      "uhi_intensity_nn_c": 17.01,
+      "uhi_intensity_classical_c": 17.06,
+      "agreement": {
+        "thermal_global_class": 0.9997849947861236,
+        "thermal_uhi_class": 0.9941303576611733,
+        "thermal_hotspots": 0.9916577977015942,
+        "thermal_local_anomaly": 0.998548714806334
+      }
+    },
+    {
+      "scene": "modesto",
+      "landsat_id": "LC08_L2SP_043034_20240930_02_T1",
+      "acquired_at": "2024-09-30T18:39:43.070080Z",
+      "shape": [
+        302,
+        300
+      ],
+      "lst_c_p5_p95": [
+        33.0,
+        41.5
+      ],
+      "uhi_intensity_nn_c": 6.73,
+      "uhi_intensity_classical_c": 6.74,
+      "agreement": {
+        "thermal_global_class": 0.9982560706401766,
+        "thermal_uhi_class": 0.9994701986754967,
+        "thermal_hotspots": 0.9998013245033113,
+        "thermal_local_anomaly": 0.9999779249448124
+      }
+    }
+  ]
+}

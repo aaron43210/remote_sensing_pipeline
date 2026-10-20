@@ -20,7 +20,7 @@ build/
 *.tfstate*
 *.tfvars
 !*.tfvars.example
-# training artifacts and local tooling
-training/artifacts/
+# training data and local tooling
+training/artifacts/data/
 frontend/node_modules/
 *.egg-info/
