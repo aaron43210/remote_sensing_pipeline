@@ -15,7 +15,7 @@ function RequireAuth({ children }) {
 }
 
 function Shell({ children }) {
-  const { user, logout, logoutAll } = useAuth()
+  const { user, logout } = useAuth()
   useEffect(() => {
     document.documentElement.dataset.theme = 'light'
     try { localStorage.removeItem('hydranet.theme') } catch { /* ignore */ }
@@ -32,7 +32,6 @@ function Shell({ children }) {
         <div className="spacer" />
         <span className="secondary" style={{ fontSize: 13 }}>{user?.name}</span>
         <button className="btn small" onClick={logout}><LogOut size={14} /> Sign out</button>
-        <button className="btn small" onClick={logoutAll} title="End every session on every device">Sign out everywhere</button>
       </header>
       <main className="main">{children}</main>
     </div>
