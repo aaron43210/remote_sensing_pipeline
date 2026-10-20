@@ -1,24 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
-import { Activity, History as HistoryIcon, LogOut, Map, Moon, Sun } from 'lucide-react'
+import { Activity, History as HistoryIcon, LogOut, Map } from 'lucide-react'
 import { AuthProvider, useAuth } from './auth'
 import AuthPage from './pages/AuthPage'
 import History from './pages/History'
 import System from './pages/System'
 import Workspace from './pages/Workspace'
-
-function useTheme() {
-  const [theme, setTheme] = useState(() => {
-    try { return localStorage.getItem('hydranet.theme') || null } catch { return null }
-  })
-  useEffect(() => {
-    if (theme) document.documentElement.dataset.theme = theme
-    else delete document.documentElement.dataset.theme
-    try { if (theme) localStorage.setItem('hydranet.theme', theme); else localStorage.removeItem('hydranet.theme') } catch { /* ignore */ }
-  }, [theme])
-  const dark = theme ? theme === 'dark' : window.matchMedia?.('(prefers-color-scheme: dark)').matches
-  return [dark, () => setTheme(dark ? 'light' : 'dark')]
-}
 
 function RequireAuth({ children }) {
   const { signedIn, ready } = useAuth()
@@ -29,7 +16,10 @@ function RequireAuth({ children }) {
 
 function Shell({ children }) {
   const { user, logout, logoutAll } = useAuth()
-  const [dark, toggle] = useTheme()
+  useEffect(() => {
+    document.documentElement.dataset.theme = 'light'
+    try { localStorage.removeItem('hydranet.theme') } catch { /* ignore */ }
+  }, [])
   return (
     <div className="shell">
       <header className="topbar">
@@ -40,7 +30,6 @@ function Shell({ children }) {
           <NavLink to="/system"><Activity size={14} /> <span>Platform</span></NavLink>
         </nav>
         <div className="spacer" />
-        <button className="btn small" onClick={toggle} aria-label="Toggle dark mode">{dark ? <Sun size={14} /> : <Moon size={14} />}</button>
         <span className="secondary" style={{ fontSize: 13 }}>{user?.name}</span>
         <button className="btn small" onClick={logout}><LogOut size={14} /> Sign out</button>
         <button className="btn small" onClick={logoutAll} title="End every session on every device">Sign out everywhere</button>
