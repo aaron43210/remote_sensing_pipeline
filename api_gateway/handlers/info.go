@@ -49,6 +49,83 @@ func (s *Server) Catalog(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"bbox": b, "granules": out})
 }
 
+// Coverage returns the footprints of EMIT acquisitions over the service region
+// in a date window, as GeoJSON, so the map can show where hyperspectral data
+// exists before a box is drawn. Only scenes a job could use are returned
+// (cloud cover within EMIT_MAX_CLOUD). "staged" = already downloaded (instant).
+func (s *Server) Coverage(c *gin.Context) {
+	to := time.Now().UTC()
+	from := to.AddDate(-1, 0, 0)
+	for _, q := range []struct {
+		key string
+		dst *time.Time
+	}{{"date_from", &from}, {"date_to", &to}} {
+		if v := c.Query(q.key); v != "" {
+			t, err := time.Parse("2006-01-02", v)
+			if err != nil {
+				fail(c, http.StatusBadRequest, q.key+" must be YYYY-MM-DD")
+				return
+			}
+			*q.dst = t
+		}
+	}
+	if !from.Before(to.AddDate(0, 0, 1)) || to.Sub(from) > 6*366*24*time.Hour {
+		fail(c, http.StatusBadRequest, "date_from must be before date_to, at most 6 years apart")
+		return
+	}
+	r := s.Cfg.AllowedRegion
+	rows, err := s.DB.Query(c, `
+		WITH region AS (SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326) AS g)
+		SELECT c.granule_id, c.acquired_at, c.cloud_pct,
+		       (c.status = 'staged' AND c.updated_at > now() - interval '30 days') OR EXISTS (
+		         SELECT 1 FROM job_sources js JOIN jobs j ON j.job_id = js.job_id
+		         WHERE js.granule_id = c.granule_id AND j.created_at > now() - interval '30 days'),
+		       ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Intersection(c.footprint, region.g), 0.002), 4)
+		FROM catalog_granules c, region
+		WHERE c.sensor = 'EMIT' AND c.footprint && region.g
+		  AND c.acquired_at >= $5 AND c.acquired_at < $6
+		  AND (c.cloud_pct IS NULL OR c.cloud_pct <= $7)
+		ORDER BY c.acquired_at DESC LIMIT 3000`,
+		r[0], r[1], r[2], r[3], from, to.AddDate(0, 0, 1), s.Cfg.EmitMaxCloud)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+	features := []gin.H{}
+	for rows.Next() {
+		var id, geom string
+		var at time.Time
+		var cloud *float64
+		var staged bool
+		if rows.Scan(&id, &at, &cloud, &staged, &geom) != nil {
+			continue
+		}
+		features = append(features, gin.H{"type": "Feature", "geometry": json.RawMessage(geom),
+			"properties": gin.H{"granule_id": id, "acquired_at": at.Format("2006-01-02"), "cloud_pct": cloud, "staged": staged}})
+	}
+	// The merged area (what the map draws): one clear outline instead of hundreds of overlapping swaths.
+	var union *string
+	_ = s.DB.QueryRow(c, `
+		WITH region AS (SELECT ST_MakeEnvelope($1, $2, $3, $4, 4326) AS g)
+		SELECT ST_AsGeoJSON(ST_SimplifyPreserveTopology(ST_Intersection(ST_Union(c.footprint), region.g), 0.003), 4)
+		FROM catalog_granules c, region
+		WHERE c.sensor = 'EMIT' AND c.footprint && region.g
+		  AND c.acquired_at >= $5 AND c.acquired_at < $6 AND (c.cloud_pct IS NULL OR c.cloud_pct <= $7)
+		GROUP BY region.g`,
+		r[0], r[1], r[2], r[3], from, to.AddDate(0, 0, 1), s.Cfg.EmitMaxCloud).Scan(&union)
+	var area any
+	if union != nil {
+		area = json.RawMessage(*union)
+	}
+	var indexedAt *time.Time
+	_ = s.DB.QueryRow(c, `SELECT max(updated_at) FROM catalog_granules WHERE sensor = 'EMIT'`).Scan(&indexedAt)
+	c.Header("Cache-Control", "private, max-age=300")
+	c.JSON(http.StatusOK, gin.H{"type": "FeatureCollection", "features": features, "max_cloud_pct": s.Cfg.EmitMaxCloud,
+		"date_from": from.Format("2006-01-02"), "date_to": to.Format("2006-01-02"), "indexed_at": indexedAt,
+		"covered_area": area})
+}
+
 // Model describes the active HydraNet version, including its verification
 // against the classical methods (public: anyone can see how the maps are made).
 func (s *Server) Model(c *gin.Context) {

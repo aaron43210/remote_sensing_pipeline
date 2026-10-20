@@ -16,6 +16,7 @@ Authentication: EARTHDATA_TOKEN (bearer) or EARTHDATA_USERNAME/PASSWORD.
 
 import logging
 import os
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -61,25 +62,66 @@ def search(bbox, date_from=None, date_to=None, max_cloud=MAX_CLOUD, short_name=R
         params["cloud_cover"] = f"0,{max_cloud}"
     r = requests.get(CMR, params=params, timeout=60)
     r.raise_for_status()
-    out = []
-    for item in r.json().get("items", []):
-        umm, meta = item["umm"], item["meta"]
-        fp = _footprint(umm)
-        if not fp["coordinates"] or not covers(fp, bbox):
-            continue
-        out.append({"granule_id": umm["GranuleUR"], "concept_id": meta["concept-id"],
-                    "acquired_at": umm["TemporalExtent"]["RangeDateTime"]["BeginningDateTime"],
-                    "cloud_cover": umm.get("CloudCover"), "url": _data_url(umm), "footprint": fp})
-    # one entry per acquisition: keep the newest processing version
-    latest = {}
-    for g in out:
-        stamp, version = _stamp(g["granule_id"])
-        if stamp not in latest or version > _stamp(latest[stamp]["granule_id"])[1]:
-            latest[stamp] = g
-    out = list(latest.values())
+    out = [g for g in map(_granule, r.json().get("items", [])) if g["footprint"]["coordinates"]
+           and covers(g["footprint"], bbox)]
+    out = _newest_versions(out)
     # clearest first (in 10 % bands), then newest
     out.sort(key=lambda g: (round((g["cloud_cover"] or 0) / 10), -_ts(g["acquired_at"])))
     return out
+
+
+def footprints(region, date_from, date_to, max_cloud=None, page_size=2000):
+    """
+    Every acquisition whose footprint INTERSECTS the region (one per acquisition,
+    newest processing version), for the coverage map. Public CMR, paginated.
+    """
+    params = {"short_name": RFL, "bounding_box": ",".join(map(str, region)),
+              "temporal": f"{date_from}T00:00:00Z,{date_to}T23:59:59Z", "page_size": page_size}
+    if max_cloud is not None:
+        params["cloud_cover"] = f"0,{max_cloud}"
+    out, headers = [], {}
+    while True:
+        for attempt in range(4):                     # CMR pages fail intermittently: back off and retry
+            try:
+                r = requests.get(CMR, params=params, headers=headers, timeout=120)
+                r.raise_for_status()
+                break
+            except Exception as e:
+                if attempt == 3 or not cmr_unavailable(e):
+                    raise
+                log.warning("CMR page failed (%s), retrying", type(e).__name__)
+                time.sleep(5 * 3 ** attempt)
+        items = r.json().get("items", [])
+        out += [g for g in map(_granule, items) if g["footprint"]["coordinates"]]
+        after = r.headers.get("CMR-Search-After")
+        if not after or len(items) < page_size:
+            return _newest_versions(out)
+        headers = {"CMR-Search-After": after}
+
+
+def _granule(item):
+    umm, meta = item["umm"], item["meta"]
+    return {"granule_id": umm["GranuleUR"], "concept_id": meta["concept-id"],
+            "acquired_at": umm["TemporalExtent"]["RangeDateTime"]["BeginningDateTime"],
+            "cloud_cover": umm.get("CloudCover"), "url": _data_url(umm), "footprint": _footprint(umm)}
+
+
+def _newest_versions(granules):
+    """One entry per acquisition: keep the newest processing version."""
+    latest = {}
+    for g in granules:
+        stamp, version = _stamp(g["granule_id"])
+        if stamp not in latest or version > _stamp(latest[stamp]["granule_id"])[1]:
+            latest[stamp] = g
+    return list(latest.values())
+
+
+def cmr_unavailable(exc):
+    """True for NASA CMR outages (timeouts, connection errors, 5xx), not for bad requests."""
+    if isinstance(exc, (requests.Timeout, requests.ConnectionError)):
+        return True
+    resp = getattr(exc, "response", None)
+    return isinstance(exc, requests.HTTPError) and resp is not None and resp.status_code >= 500
 
 
 def _ts(s):
@@ -180,13 +222,31 @@ def ortho_crop(nc_path, bbox, var="reflectance"):
             wl = np.asarray(sbp["wavelengths"][:], dtype=float)
             good = np.asarray(sbp["good_wavelengths"][:]).astype(bool)
         else:
-            wl = np.arange(data.shape[2], dtype=float)
+            # the MASK product's band names (their order changed between versions)
+            sbp = ds.groups.get("sensor_band_parameters")
+            names = sbp["mask_bands"][:] if sbp is not None and "mask_bands" in sbp.variables else None
+            wl = np.array([str(n) for n in names]) if names is not None else np.arange(data.shape[2], dtype=float)
             good = np.ones(data.shape[2], bool)
     georef = {"crs": "EPSG:4326", "transform": transform, "width": w, "height": h}
     return cube, wl, good, georef
 
 
-def cloud_from_mask(mask_cube):
-    """EMIT L2A MASK bands: 0 cloud, 1 cirrus, 2 water, 3 spacecraft, 4 dilated cloud."""
-    m = np.nan_to_num(mask_cube[..., [0, 1, 3, 4]], nan=0.0)
+CLOUD_FLAGS = ("Cloud Flag", "Cirrus Flag", "Dilated Cloud Flag", "Spacecraft Flag", "SpecTf-Cloud Flag")
+
+
+def cloud_from_mask(mask_cube, band_names=None):
+    """
+    Cloud/unusable pixels from the EMIT L2A MASK flag bands, chosen BY NAME:
+    v001/002 order is cloud, cirrus, water, spacecraft, dilated cloud, AOD, H2O;
+    v003 is cloud, cirrus, water, dilated cloud, SpecTf probability, SpecTf flag,
+    buffer distance. Continuous bands (probability, AOD, H2O, distance) are never
+    used as flags. Without names (old files) the v001/002 positions apply.
+    """
+    if band_names is not None and len(band_names) and isinstance(band_names[0], str):
+        idx = [i for i, n in enumerate(band_names) if n.strip() in CLOUD_FLAGS]
+        if not idx:
+            raise ValueError(f"no cloud flag bands among {list(band_names)}")
+    else:
+        idx = [0, 1, 3, 4]
+    m = np.nan_to_num(mask_cube[..., idx], nan=0.0)
     return (m > 0).any(axis=-1)

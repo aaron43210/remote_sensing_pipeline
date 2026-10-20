@@ -2,11 +2,27 @@ import { useEffect, useMemo, useState } from 'react'
 import { CheckCircle2, CircleAlert, Download } from 'lucide-react'
 import { renderCategorical } from '../lib/cog'
 import { dateOnly, fmt, pct } from '../lib/format'
-import { layerLabel, orderLayers, TASKS } from '../lib/layers'
+import { isMainLayer, layerLabel, orderLayers, TASKS } from '../lib/layers'
 import { CompositionBars, Histogram, Legend, StatTile } from './charts'
 
 // Agreement the deployed network must keep with the classical method (shadow check).
-const SHADOW_GATE = { pixel_agreement: 0.97, r2: 0.95, mae: 0.05 }
+// Continuous maps are judged by nMAE (error as a share of the value's physical range):
+// R² is shown for information only, because it collapses on areas whose values
+// barely vary (e.g. a uniform field), even when the error is tiny.
+const SHADOW_GATE = { pixel_agreement: 0.97, nmae: 0.05, r2: 0.95, mae: 0.05 }
+
+function judged(m) {
+  if (m.pixel_agreement !== undefined) return { metric: 'pixel_agreement', ok: m.pixel_agreement >= SHADOW_GATE.pixel_agreement }
+  if (m.nmae !== undefined) return { metric: 'nmae', ok: m.nmae <= SHADOW_GATE.nmae }
+  if (m.r2 !== undefined && m.r2 !== null) return { metric: 'r2', ok: m.r2 >= SHADOW_GATE.r2 }   // results from before nMAE
+  return { metric: 'mae', ok: m.mae <= SHADOW_GATE.mae }
+}
+
+function agreementText(metric, m) {
+  if (metric === 'pixel_agreement') return pct(m.pixel_agreement)
+  if (metric === 'nmae') return `error ${pct(m.nmae)} of range`
+  return `${metric.toUpperCase()} ${fmt(m[metric], 3)}`
+}
 
 function Verification({ verification }) {
   const rows = Object.entries(verification || {})
@@ -29,14 +45,13 @@ function Verification({ verification }) {
           </thead>
           <tbody>
             {rows.map(([layer, m]) => {
-              const metric = m.pixel_agreement !== undefined ? 'pixel_agreement' : m.r2 !== undefined && m.r2 !== null ? 'r2' : 'mae'
-              const v = m[metric]
-              const ok = metric === 'mae' ? v <= SHADOW_GATE.mae : v >= SHADOW_GATE[metric]
+              const { metric, ok } = judged(m)
               return (
                 <tr key={layer}>
                   <td style={{ fontWeight: 500 }}>{layerLabel(layer)}</td>
-                  <td className="r num" style={{ whiteSpace: 'nowrap' }}>
-                    {metric === 'pixel_agreement' ? pct(v) : `${metric.toUpperCase()} ${fmt(v, 3)}`}
+                  <td className="r num" style={{ whiteSpace: 'nowrap' }}
+                      title={metric === 'nmae' && m.r2 != null ? `MAE ${fmt(m.mae, 4)} · R² ${fmt(m.r2, 3)} (informative)` : undefined}>
+                    {agreementText(metric, m)}
                   </td>
                   <td className="r num muted" style={{ whiteSpace: 'nowrap' }}>
                     {m.n?.toLocaleString() ?? m.n}
@@ -151,7 +166,14 @@ export default function ResultsPanel({ job, data, onOverlay, onRefresh }) {
 
       <label className="field">Map layer
         <select value={layer?.name || ''} onChange={(e) => { setLayerName(e.target.value); setHighlight(null) }}>
-          {list.map((l) => <option key={l.name} value={l.name}>{layerLabel(l.name)}</option>)}
+          <optgroup label="Main maps">
+            {list.filter((l) => isMainLayer(l.name, task)).map((l) => <option key={l.name} value={l.name}>{layerLabel(l.name)}</option>)}
+          </optgroup>
+          {list.some((l) => !isMainLayer(l.name, task)) && (
+            <optgroup label="More detail">
+              {list.filter((l) => !isMainLayer(l.name, task)).map((l) => <option key={l.name} value={l.name}>{layerLabel(l.name)}</option>)}
+            </optgroup>
+          )}
         </select>
       </label>
       <label className="field">Opacity {Math.round(opacity * 100)} %

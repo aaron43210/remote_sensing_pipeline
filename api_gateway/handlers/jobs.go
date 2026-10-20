@@ -140,6 +140,53 @@ func (s *Server) activeModel(ctx context.Context) string {
 
 // requestHash identifies "the same request": same area (to ~10 m), tasks,
 // dates, source and model. Identical requests share one computation.
+// emitCandidates lists, clearest first then newest (the order ingestion picks in),
+// the catalogued EMIT scenes that fully cover the box in the job's dates. They
+// travel with the request so ingestion still works while NASA's search is down.
+// Best effort: an empty catalog or a query error just means no fallback.
+func (s *Server) emitCandidates(ctx context.Context, req createJob) []contracts.EmitCandidate {
+	if req.Source != "nasa" || !(contains(req.Tasks, "agriculture") || contains(req.Tasks, "mineral")) {
+		return nil
+	}
+	to := time.Now().UTC()
+	if t, err := time.Parse("2006-01-02", req.DateTo); err == nil {
+		to = t
+	}
+	from := to.AddDate(-1, 0, 0)
+	if t, err := time.Parse("2006-01-02", req.DateFrom); err == nil {
+		from = t
+	}
+	b := req.BBox
+	rows, err := s.DB.Query(ctx, `SELECT granule_id, coalesce(url, ''), acquired_at, cloud_pct FROM catalog_granules
+		WHERE sensor = 'EMIT' AND ST_Covers(footprint, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+		  AND acquired_at >= $5 AND acquired_at < $6 AND (cloud_pct IS NULL OR cloud_pct <= $7)
+		ORDER BY round(coalesce(cloud_pct, 0) / 10), acquired_at DESC LIMIT 5`,
+		b[0], b[1], b[2], b[3], from, to.AddDate(0, 0, 1), s.Cfg.EmitMaxCloud)
+	if err != nil {
+		return nil
+	}
+	defer rows.Close()
+	var out []contracts.EmitCandidate
+	for rows.Next() {
+		var c contracts.EmitCandidate
+		var at time.Time
+		if rows.Scan(&c.GranuleID, &c.URL, &at, &c.CloudCover) == nil {
+			c.AcquiredAt = at.UTC().Format(time.RFC3339)
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
+func contains(xs []string, x string) bool {
+	for _, v := range xs {
+		if v == x {
+			return true
+		}
+	}
+	return false
+}
+
 func requestHash(req createJob, model string) string {
 	r := func(v float64) string { return strconv.FormatFloat(math.Round(v*1e4)/1e4, 'f', 4, 64) }
 	key := strings.Join([]string{r(req.BBox[0]), r(req.BBox[1]), r(req.BBox[2]), r(req.BBox[3]),
@@ -248,7 +295,8 @@ func (s *Server) CreateJob(c *gin.Context) {
 	default:
 		msg := contracts.IngestRequest{SchemaVersion: contracts.SchemaVersion, EventID: uuid.NewString(),
 			JobID: jobID, TS: time.Now().UTC().Format(time.RFC3339Nano), UserID: user, BBox: b,
-			Tasks: req.Tasks, DateFrom: req.DateFrom, DateTo: req.DateTo, Source: req.Source}
+			Tasks: req.Tasks, DateFrom: req.DateFrom, DateTo: req.DateTo, Source: req.Source,
+			EmitCandidates: s.emitCandidates(ctx, req)}
 		payload, _ := json.Marshal(msg)
 		if _, err := tx.Exec(ctx, `INSERT INTO outbox (topic, key, payload) VALUES ($1, $2, $3)`,
 			contracts.TopicIngestRequests, jobID, payload); err != nil {

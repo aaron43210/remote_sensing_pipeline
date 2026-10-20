@@ -116,6 +116,16 @@ def main():
     code, _ = call(base, "POST", "/api/auth/login", body={"email": "nobody@example.com", "password": "wrongpass1"})
     check(code == 401, "wrong credentials rejected")
 
+    print("== EMIT coverage (map layer)")
+    code, _ = call(base, "GET", "/api/coverage", None)
+    check(code == 401, "coverage needs a token")
+    code, cov = call(base, "GET", "/api/coverage?date_from=2023-06-01&date_to=2023-09-30", tok)
+    check(code == 200 and cov.get("type") == "FeatureCollection", f"coverage served: {len(cov.get('features', []))} scenes")
+    check(all(f["properties"].get("cloud_pct") is None or f["properties"]["cloud_pct"] <= cov["max_cloud_pct"]
+              for f in cov.get("features", [])), "only scenes a job could use (cloud limit)")
+    code, _ = call(base, "GET", "/api/coverage?date_from=2023-13-01", tok)
+    check(code == 400, "bad coverage dates rejected")
+
     print("== validation")
     for body, why in [({"bbox": [-119, 36, -118, 37], "tasks": ["mineral"]}, "too large"),
                       ({"bbox": [-119, 36, -119.05, 36.05], "tasks": ["mineral"]}, "inverted"),

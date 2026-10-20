@@ -57,13 +57,27 @@ def _restrict(map_dict, sample):
     return out
 
 
+ABUNDANCE_MIN_MEAN = 0.02     # an abundance layer is written only for minerals present in the area
+CLASS_MIN_FRACTION = 0.01
+
+
+def _present(nn, bare, i):
+    """Mineral i covers >= 2 % on average, or is the dominant class of >= 1 % of bare pixels."""
+    if not bare.any():
+        return False
+    return bool(np.nanmean(nn["mineral_abundance"][..., i][bare]) >= ABUNDANCE_MIN_MEAN
+                or (nn["mineral_class"][bare] == i).mean() >= CLASS_MIN_FRACTION)
+
+
 def _shadow(nn_maps, ref_maps, task):
     agr = maps.agreement(nn_maps, ref_maps)
     out = {}
     for layer, m in agr.items():
         if layer.endswith("_std") or layer == "mineral_confidence":
             continue
-        value = m.get("pixel_agreement", m.get("r2"))
+        # one "agreement" scale for the metric and its alert: share of pixels for classes,
+        # 1 - nMAE for continuous layers (R² is unstable on low-variance areas)
+        value = m.get("pixel_agreement", 1 - m["nmae"] if "nmae" in m else m.get("r2"))
         out[layer] = {k: (round(v, 5) if isinstance(v, float) else v) for k, v in m.items()}
         if value is not None:
             metrics.AGREEMENT.labels(task, layer).set(value)
@@ -126,8 +140,9 @@ def hyperspectral(raw):
                layers.write(job, "mineral", "mineral_confidence", nn["mineral_confidence"], georef),
                layers.write(job, "mineral", "mineral_quality", nn["mineral_quality"], georef)]
         for i, m in enumerate(spec.MINERALS):
-            lyr.append(layers.write(job, "mineral", f"mineral_abundance_{m}", nn["mineral_abundance"][..., i],
-                                    georef, units="fraction", colormap="blue", vmin=0.0, vmax=1.0))
+            if _present(nn, bare, i):                             # no layer for minerals absent from the area
+                lyr.append(layers.write(job, "mineral", f"mineral_abundance_{m}", nn["mineral_abundance"][..., i],
+                                        georef, units="fraction", colormap="blue", vmin=0.0, vmax=1.0))
         if "agriculture" not in msg.tasks:
             lyr.append(land)
         summary = {**common, "mapped_fraction": round(float(bare.mean()), 4),

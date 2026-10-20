@@ -37,6 +37,14 @@ class Georef(BaseModel):
     height: int
 
 
+class EmitCandidate(BaseModel):
+    """An EMIT acquisition from the platform catalog that fully covers the job's box."""
+    granule_id: str
+    url: Optional[str] = None
+    acquired_at: str
+    cloud_cover: Optional[float] = None
+
+
 class IngestRequest(Msg):
     """ingest.requests: gateway -> ingestion."""
     user_id: Optional[str] = None
@@ -45,6 +53,8 @@ class IngestRequest(Msg):
     date_from: Optional[str] = None
     date_to: Optional[str] = None
     source: Literal["nasa", "fixture"] = "nasa"
+    # clearest-first scenes from catalog_granules: used when NASA's search (CMR) is unreachable
+    emit_candidates: list[EmitCandidate] = []
 
 
 class RawHyperspectral(Msg):

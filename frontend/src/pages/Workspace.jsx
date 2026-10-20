@@ -8,6 +8,7 @@ import JobTimeline from '../components/JobTimeline'
 import PixelInspector from '../components/PixelInspector'
 import ResultsPanel from '../components/ResultsPanel'
 import { forgetCogs } from '../lib/cog'
+import { todayIso, yearAgoIso } from '../lib/format'
 import { useServerConfig } from '../useServerConfig'
 
 export default function Workspace() {
@@ -21,6 +22,18 @@ export default function Workspace() {
   const [overlays, setOverlays] = useState([])
   const [point, setPoint] = useState(null)
   const [error, setError] = useState(null)
+  const [dates, setDates] = useState(() => [yearAgoIso(), todayIso()])
+  const [coverage, setCoverage] = useState(null)
+
+  // Where EMIT data exists for the chosen dates (shown on the map while choosing an area).
+  useEffect(() => {
+    if (id) return undefined
+    let live = true
+    const t = setTimeout(() => {
+      api.coverage(dates[0], dates[1]).then((c) => live && setCoverage(c)).catch(() => live && setCoverage(null))
+    }, 250)
+    return () => { live = false; clearTimeout(t) }
+  }, [id, dates])
 
   // Follow the job live (SSE, polling fallback) while it runs.
   useEffect(() => {
@@ -73,12 +86,14 @@ export default function Workspace() {
                 Each map is checked against the classical method it reproduces.</p>
             </div>
             <JobForm config={config} bbox={bbox} setBbox={setBbox} drawing={drawing} setDrawing={setDrawing}
+                     dates={dates} setDates={setDates} coverage={coverage}
                      onSubmitted={(j) => navigate(`/jobs/${j.job_id}`)} />
           </>
         )}
       </aside>
       <AreaMap region={config.allowed_region} maxDeg={config.max_bbox_deg} bbox={bbox} onBbox={setBbox}
                drawing={drawing} setDrawing={setDrawing} overlays={overlays} marker={point}
+               coverage={id ? null : coverage}
                onInspect={data ? (lat, lon) => setPoint([lat, lon]) : null}>
         {data && !point && <div className="map-hint">Click the map to read every value at a point</div>}
         {data && <PixelInspector point={point} layers={data.layers} onClose={() => setPoint(null)} />}

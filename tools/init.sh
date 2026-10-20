@@ -12,6 +12,8 @@ PY
   echo "waiting for database migrations"; sleep 2
 done
 python scripts/bootstrap_admin.py
+# EMIT coverage for the map (public CMR; a failure must not block the platform)
+python scripts/refresh_catalog.py || echo "EMIT coverage not indexed yet (CMR unreachable?); Dagster retries daily"
 if [ -f /artifacts/models/${MODEL_VERSION:-v1}/hydra.onnx ]; then
   python scripts/promote_model.py --if-missing \
     --model-dir /artifacts/models/${MODEL_VERSION:-v1} --lut /artifacts/data/agri_lut.npz

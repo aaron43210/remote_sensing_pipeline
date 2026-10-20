@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
+import logo from '../assets/icon.png'
 import { useAuth } from '../auth'
 
 // Only same-site paths: never "//evil.example", "/\\evil", or an absolute URL (open redirect).
@@ -36,7 +37,7 @@ export default function AuthPage({ mode }) {
   return (
     <div className="auth">
       <form className="card" onSubmit={submit}>
-        <div className="brand"><span className="brand-dot" /> HydraNet Maps</div>
+        <div className="brand" style={{ gap: 10, marginBottom: 4 }}><img src={logo} alt="HydraNet Logo" className="brand-logo large" /> HydraNet Maps</div>
         <h1>{register ? 'Create an account' : 'Sign in'}</h1>
         {register && (
           <label className="field">Name

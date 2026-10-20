@@ -18,6 +18,7 @@ const NAMES = {
   agri_LAI: 'Leaf area index (LAI)',
   agri_ALA: 'Mean leaf angle (ALA)',
   mineral_class: 'Dominant mineral',
+  mineral_abundance: 'Abundances (all minerals)',
   mineral_confidence: 'Classification confidence',
   mineral_quality: 'Quality (SAM + SMA)',
   thermal_lst: 'Land surface temperature',
@@ -34,12 +35,22 @@ export function layerLabel(name) {
   return name
 }
 
-// Primary layers first; uncertainty and per-mineral abundance grouped after.
+// The few maps most people need, per task (shown first, under "Main maps");
+// everything else (other traits, uncertainties, abundances, diagnostics) is "More detail".
+export const MAIN_LAYERS = {
+  agriculture: ['agri_LAI', 'agri_Cab', 'agri_Cw', 'ndvi'],
+  mineral: ['mineral_class'],
+  thermal: ['thermal_lst', 'thermal_uhi_class', 'thermal_hotspots'],
+}
+
+export const isMainLayer = (name, task) => (MAIN_LAYERS[task] || []).includes(name)
+
+// Main layers first; then other traits, uncertainty and per-mineral abundance.
 export function orderLayers(layers, task) {
   const primary = {
-    agriculture: ['agri_LAI', 'agri_Cab', 'agri_Cw', 'agri_Cm', 'agri_Car', 'agri_ALA', 'ndvi', 'landcover'],
-    mineral: ['mineral_class', 'mineral_confidence', 'mineral_quality', 'landcover'],
-    thermal: ['thermal_lst', 'thermal_uhi_class', 'thermal_global_class', 'thermal_hotspots', 'thermal_local_anomaly'],
+    agriculture: [...MAIN_LAYERS.agriculture, 'agri_Cm', 'agri_Car', 'agri_ALA', 'landcover'],
+    mineral: [...MAIN_LAYERS.mineral, 'mineral_confidence', 'mineral_quality', 'landcover'],
+    thermal: [...MAIN_LAYERS.thermal, 'thermal_global_class', 'thermal_local_anomaly'],
   }[task] || []
   const rank = (n) => {
     const i = primary.indexOf(n)

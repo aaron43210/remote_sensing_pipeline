@@ -11,7 +11,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 from dagster import AssetExecutionContext, MaterializeResult, MetadataValue, asset
 
-from hs_common import storage
+from hs_common import catalog, storage
 from hs_common.sources import emit, landsat
 from hs_common.storage import keys
 
@@ -32,17 +32,6 @@ def _tiles(region, step):
         lon += step
 
 
-def _wkt_multipolygon(geometry):
-    polys = geometry["coordinates"] if geometry["type"] == "MultiPolygon" else [geometry["coordinates"]]
-    rings = []
-    for poly in polys:
-        ring = [tuple(p[:2]) for p in poly[0]]
-        if ring[0] != ring[-1]:
-            ring.append(ring[0])
-        rings.append("((" + ", ".join(f"{x} {y}" for x, y in ring) + "))")
-    return "MULTIPOLYGON(" + ", ".join(rings) + ")"
-
-
 def _dq(conn, run_id, dataset, check, passed, observed):
     conn.execute("INSERT INTO dq_results (run_id, dataset, check_name, passed, observed) VALUES (%s,%s,%s,%s,%s)",
                  (run_id, dataset, check, passed, json.dumps(observed)))
@@ -52,12 +41,10 @@ def _dq(conn, run_id, dataset, check, passed, observed):
 def imagery_catalog(context: AssetExecutionContext) -> MaterializeResult:
     since = (date.today() - timedelta(days=45)).isoformat()
     rows = {}
+    # EMIT: every acquisition intersecting the region (the map's coverage layer)
+    with psycopg.connect(DB) as conn:
+        n_emit = catalog.refresh_emit(conn, REGION, since, date.today().isoformat())
     for tile in _tiles(REGION, TILE_DEG):
-        try:
-            for g in emit.search(tile, since, None, max_cloud=80):
-                rows[g["granule_id"]] = ("EMIT", g["acquired_at"], g["cloud_cover"], g["footprint"], g["url"])
-        except Exception as e:                       # one tile failing must not lose the others
-            context.log.warning(f"EMIT search failed for {tile}: {e}")
         try:
             item = landsat.search(tile, since, None, max_cloud=80)
             if item:
@@ -68,14 +55,10 @@ def imagery_catalog(context: AssetExecutionContext) -> MaterializeResult:
     run_id = context.run_id
     with psycopg.connect(DB) as conn:
         for gid, (sensor, at, cloud, fp, url) in rows.items():
-            conn.execute("""INSERT INTO catalog_granules (granule_id, sensor, acquired_at, cloud_pct, footprint, url)
-                VALUES (%s, %s, %s, %s, ST_Multi(ST_GeomFromText(%s, 4326)), %s)
-                ON CONFLICT (granule_id) DO UPDATE SET cloud_pct = EXCLUDED.cloud_pct, updated_at = now()""",
-                         (gid, sensor, at, cloud, _wkt_multipolygon(fp), url))
-        _dq(conn, run_id, "catalog_granules", "found_any_acquisition", len(rows) > 0, {"rows": len(rows)})
-    return MaterializeResult(metadata={"acquisitions": len(rows),
-                                       "emit": sum(1 for r in rows.values() if r[0] == "EMIT"),
-                                       "landsat": sum(1 for r in rows.values() if r[0] == "LANDSAT")})
+            catalog.upsert(conn, sensor, gid, at, cloud, fp, url)
+        _dq(conn, run_id, "catalog_granules", "found_any_acquisition", n_emit + len(rows) > 0,
+            {"emit": n_emit, "landsat": len(rows)})
+    return MaterializeResult(metadata={"acquisitions": n_emit + len(rows), "emit": n_emit, "landsat": len(rows)})
 
 
 @asset(deps=[imagery_catalog], description="Clearest recent EMIT granules downloaded into Bronze, so user jobs skip NASA")

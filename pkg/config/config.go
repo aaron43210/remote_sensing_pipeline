@@ -41,6 +41,7 @@ type Config struct {
 	MaxBBoxDeg           float64
 	AllowedRegion        [4]float64 // lon_min, lat_min, lon_max, lat_max
 	AllowFixtures        bool
+	EmitMaxCloud         float64 // same limit as ingestion: the coverage map shows only usable scenes
 
 	StageTimeouts map[string]time.Duration
 }
@@ -120,6 +121,7 @@ func Load() Config {
 		MaxBBoxDeg:           GetFloat("MAX_BBOX_DEG", 0.1),
 		AllowedRegion:        region(Get("ALLOWED_REGION", "-124.5,32.5,-114.0,42.0")),
 		AllowFixtures:        GetBool("ALLOW_FIXTURES", true),
+		EmitMaxCloud:         GetFloat("EMIT_MAX_CLOUD", 40),
 
 		StageTimeouts: map[string]time.Duration{
 			"queued":     time.Duration(GetInt("SLA_QUEUED_MIN", 30)) * time.Minute,
