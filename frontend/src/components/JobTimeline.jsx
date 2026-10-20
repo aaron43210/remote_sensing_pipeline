@@ -35,7 +35,6 @@ export default function JobTimeline({ job, onCancel }) {
         <h2 style={{ margin: 0 }}>Job <span className="num muted" style={{ fontWeight: 400 }}>{job.job_id.slice(4, 12)}</span></h2>
         <span className={`badge ${STATUS_TONE[job.status] || ''}`}>{STATUS_TEXT[job.status] || job.status}</span>
       </div>
-      {job.source === 'fixture' && <div className="notice info">Synthetic test scene: these maps are not real imagery.</div>}
       {job.reused_from && <div className="notice info">An identical request was already processed; its maps were reused.</div>}
       <div className="progress" aria-label={`progress ${job.progress}%`}><div style={{ width: `${job.progress}%` }} /></div>
       <div className="row between muted" style={{ fontSize: 12 }}>

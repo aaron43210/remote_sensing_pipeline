@@ -29,7 +29,7 @@ export default function History() {
                 <td>{when(j.created_at)}</td>
                 <td className="num secondary" style={{ fontSize: 12 }}>{bboxLabel(j.bbox)}</td>
                 <td>{j.tasks.map((t) => TASKS[t]?.label || t).join(', ')}</td>
-                <td>{j.source === 'fixture' ? <span className="badge warning">test scene</span> : 'NASA'}</td>
+                <td>NASA</td>
                 <td><span className={`badge ${STATUS_TONE[j.status] || ''}`}>{j.status.toLowerCase().replace('_', ' ')}</span></td>
                 <td className="r"><Link to={`/jobs/${j.job_id}`}>Open</Link></td>
               </tr>
