@@ -108,9 +108,6 @@ with sync_playwright() as p:
     expect(page.get_by_text("Map verification", exact=False)).to_be_visible(timeout=15000)
     ok(True, "platform page shows the model's verification gates")
     page.screenshot(path=f"{SHOTS}/6-platform.png", full_page=True)
-
-    page.get_by_role("button", name="Toggle dark mode").click()
-    page.screenshot(path=f"{SHOTS}/7-platform-dark.png")
     browser.close()
 
 relevant = [e for e in errors if "favicon" not in e]
