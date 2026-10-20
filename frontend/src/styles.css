@@ -157,7 +157,6 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
 .map-tools { position: absolute; top: 12px; right: 12px; z-index: 500; display: flex; gap: 6px; }
 .inspector { position: absolute; bottom: 16px; right: 16px; z-index: 500; width: 300px; max-height: 50%;
   overflow: auto; }
-.fixture-banner { position: absolute; top: 12px; left: 56px; z-index: 500; }
 
 /* Auth */
 .auth { min-height: 100%; display: grid; place-items: center; padding: 20px; }

@@ -4,8 +4,8 @@ Browser test of the real UI (headless Chromium, Playwright).
     docker run --rm --network host -v $PWD/tests:/t -v /tmp/shots:/shots \
       mcr.microsoft.com/playwright/python:v1.48.0-jammy python /t/ui_smoke.py http://localhost:3000 /shots
 
-Registers, enters an area, submits a job (fixture scene), follows the live
-timeline, then checks the map overlay image actually loaded, the legend and
+Registers, enters an area, submits a job (synthetic scene via the API, needs
+ALLOW_FIXTURES=true), follows the live timeline, then checks the map overlay image actually loaded, the legend and
 chart rendered, every task tab works, mineral highlighting re-renders, and the
 pixel inspector reads values from the COGs. Fails on any browser console error.
 """
@@ -50,19 +50,30 @@ with sync_playwright() as p:
     ok(True, "unauthenticated user is sent to sign in")
     page.get_by_role("link", name="Create an account").click()
     page.get_by_label("Name").fill("UI Test")
-    page.get_by_label("Email").fill(f"ui-{secrets.token_hex(4)}@example.com")
+    email = f"ui-{secrets.token_hex(4)}@example.com"
+    page.get_by_label("Email").fill(email)
     page.get_by_label("Password").fill("Ui-test-passphrase-7")
     page.get_by_role("button", name="Create account").click()
     expect(page.get_by_role("heading", name="Make maps for an area")).to_be_visible()
     ok(True, "registered and landed on the workspace")
     page.screenshot(path=f"{SHOTS}/1-workspace.png")
 
+    bbox = [-119.84, 36.71, -119.79, 36.76]
     page.get_by_role("button", name="Enter coordinates").click()
-    for label, v in (("West (lon)", "-119.8400"), ("South (lat)", "36.7100"), ("East (lon)", "-119.7900"), ("North (lat)", "36.7600")):
-        page.get_by_label(label).fill(v)
+    for label, v in zip(("West (lon)", "South (lat)", "East (lon)", "North (lat)"), bbox):
+        page.get_by_label(label).fill(f"{v:.4f}")
     page.get_by_role("button", name="Apply").click()
-    page.get_by_role("button", name="Make maps").click()
-    page.wait_for_url("**/jobs/**", timeout=15000)
+    expect(page.get_by_role("button", name="Make maps")).to_be_enabled()
+    ok(True, "area entered, form ready to submit")
+    # The UI only submits real NASA imagery (EMIT needs an Earthdata token), so the
+    # job itself is a synthetic scene submitted through the API (ALLOW_FIXTURES=true)
+    # for the same user, then followed in the browser like any other job.
+    tok = page.request.post(f"{BASE}/api/auth/login",
+                            data={"email": email, "password": "Ui-test-passphrase-7"}).json()["token"]
+    job = page.request.post(f"{BASE}/api/jobs", headers={"Authorization": f"Bearer {tok}"},
+                            data={"bbox": bbox, "tasks": ["agriculture", "mineral", "thermal"], "source": "fixture"})
+    ok(job.status == 202, f"fixture job accepted ({job.status})")
+    page.goto(f"{BASE}/jobs/{job.json()['job_id']}")
     ok(True, "job submitted, job page open")
     page.screenshot(path=f"{SHOTS}/2-running.png")
 

@@ -36,10 +36,6 @@ class keys:
         return f"bronze/emit/{granule_id}/{name}"
 
     @staticmethod
-    def landsat_asset(scene_id, name):
-        return f"bronze/landsat/{scene_id}/{name}"
-
-    @staticmethod
     def events(topic, date, part):
         return f"bronze/events/topic={topic}/dt={date}/{part}.parquet"
 
@@ -184,10 +180,3 @@ def get_numpy(key):
     import numpy as np
     return np.load(io.BytesIO(get_bytes(key)))
 
-
-def delete_prefix(prefix):
-    paginator = client().get_paginator("list_objects_v2")
-    for page in paginator.paginate(Bucket=bucket(), Prefix=prefix):
-        objs = [{"Key": o["Key"]} for o in page.get("Contents", [])]
-        if objs:
-            client().delete_objects(Bucket=bucket(), Delete={"Objects": objs})

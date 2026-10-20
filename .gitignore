@@ -8,6 +8,7 @@
 *.tif
 *.h5
 __pycache__/
+.pytest_cache/
 *.pyc
 .DS_Store
 node_modules/
@@ -21,6 +22,7 @@ build/
 *.tfvars
 !*.tfvars.example
 # training data and local tooling
-training/artifacts/data/
+training/artifacts/data/*
+!training/artifacts/data/agri_lut.npz
 frontend/node_modules/
 *.egg-info/

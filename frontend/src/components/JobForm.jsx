@@ -20,12 +20,11 @@ export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, on
   const [tasks, setTasks] = useState(['agriculture', 'mineral', 'thermal'])
   const [dateFrom, setDateFrom] = useState(yearAgo())
   const [dateTo, setDateTo] = useState(today())
-  const [source, setSource] = useState('nasa')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
   const [catalog, setCatalog] = useState(null)
   const [edit, setEdit] = useState(null)
-  const idemKey = useMemo(newIdempotencyKey, [bbox, tasks, dateFrom, dateTo, source])
+  const idemKey = useMemo(newIdempotencyKey, [bbox, tasks, dateFrom, dateTo])
 
   useEffect(() => {
     setCatalog(null)
@@ -43,7 +42,7 @@ export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, on
     setError(null)
     setBusy(true)
     try {
-      const job = await api.createJob({ bbox, tasks, date_from: dateFrom, date_to: dateTo, source }, idemKey)
+      const job = await api.createJob({ bbox, tasks, date_from: dateFrom, date_to: dateTo }, idemKey)
       onSubmitted(job)
     } catch (err) {
       setError(err instanceof ApiError && err.status === 429
