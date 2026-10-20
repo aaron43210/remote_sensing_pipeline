@@ -20,9 +20,19 @@ import config
 logger = logging.getLogger(__name__)
 
 
-def build_mask(wavelengths):
-    """Flag bands unusable from the wavelength axis alone. True = BAD."""
+def build_mask(wavelengths, good=None):
+    """
+    Flag bands unusable from the wavelength axis alone. True = BAD.
+
+    good: the sensor's own per-band quality flags (EMIT's good_wavelengths),
+    when the input carries them. They are authoritative for that sensor, so
+    the generic water-window and edge rules below are not applied on top.
+    """
     wl = np.asarray(wavelengths, dtype=float)
+    if good is not None and len(good) == wl.size:
+        mask = ~np.asarray(good, dtype=bool)
+        logger.info("Bad-band mask: %d of %d bands flagged by the sensor", int(mask.sum()), mask.size)
+        return mask
     mask = np.zeros(wl.shape, dtype=bool)
 
     for low, high in config.WATER_WINDOWS:

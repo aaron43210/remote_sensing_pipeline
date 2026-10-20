@@ -1,0 +1,30 @@
+{
+  "name": "hydranet-frontend",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "oxlint src",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "geotiff": "^3.0.5",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^1.31.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-leaflet": "^5.0.0",
+    "react-router": "^7.18.4"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.3.3",
+    "@vitejs/plugin-react": "^6.0.5",
+    "jsdom": "^30.1.3",
+    "oxlint": "^1.78.0",
+    "vite": "^8.2.1",
+    "vitest": "^5.0.5"
+  }
+}

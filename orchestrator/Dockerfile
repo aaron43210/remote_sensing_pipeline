@@ -1,16 +1,14 @@
-# =============================================================
-# OWNER: AARON
-# Orchestrator — Multi-Stage Production Dockerfile
-# =============================================================
-
-FROM golang:1.22-alpine AS builder
-WORKDIR /app
+# Build context: repository root. Multi-arch: amd64 + arm64.
+FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS build
+ARG TARGETOS TARGETARCH
+WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download
-COPY orchestrator/ ./orchestrator/
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o orchestrator ./orchestrator/
+COPY pkg/ pkg/
+COPY orchestrator/ orchestrator/
+RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -ldflags="-s -w" -o /out/orchestrator ./orchestrator
 
-FROM gcr.io/distroless/static-debian12
-COPY --from=builder /app/orchestrator /orchestrator
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/orchestrator /orchestrator
 USER nonroot:nonroot
 ENTRYPOINT ["/orchestrator"]

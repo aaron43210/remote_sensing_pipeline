@@ -1,0 +1,105 @@
+package handlers
+
+import (
+	"encoding/json"
+	"net/http"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/gin-gonic/gin"
+)
+
+// Catalog lists imagery already indexed (and possibly pre-staged) for a bbox,
+// so the UI can show which dates exist before a job is submitted. It reads
+// the PostGIS catalog the batch pipeline maintains; it never calls NASA.
+func (s *Server) Catalog(c *gin.Context) {
+	parts := strings.Split(c.Query("bbox"), ",")
+	if len(parts) != 4 {
+		fail(c, http.StatusBadRequest, "bbox=lon_min,lat_min,lon_max,lat_max required")
+		return
+	}
+	b := make([]float64, 4)
+	for i, p := range parts {
+		v, err := strconv.ParseFloat(strings.TrimSpace(p), 64)
+		if err != nil {
+			fail(c, http.StatusBadRequest, "bbox values must be numbers")
+			return
+		}
+		b[i] = v
+	}
+	rows, err := s.DB.Query(c, `SELECT granule_id, sensor, acquired_at, cloud_pct, status
+		FROM catalog_granules WHERE ST_Covers(footprint, ST_MakeEnvelope($1, $2, $3, $4, 4326))
+		ORDER BY acquired_at DESC LIMIT 40`, b[0], b[1], b[2], b[3])
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "database error")
+		return
+	}
+	defer rows.Close()
+	out := []gin.H{}
+	for rows.Next() {
+		var id, sensor, status string
+		var at time.Time
+		var cloud *float64
+		if rows.Scan(&id, &sensor, &at, &cloud, &status) == nil {
+			out = append(out, gin.H{"granule_id": id, "sensor": sensor, "acquired_at": at,
+				"cloud_pct": cloud, "staged": status == "staged"})
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"bbox": b, "granules": out})
+}
+
+// Model describes the active HydraNet version, including its verification
+// against the classical methods (public: anyone can see how the maps are made).
+func (s *Server) Model(c *gin.Context) {
+	var version, hash string
+	var card, verification []byte
+	var promoted *time.Time
+	err := s.DB.QueryRow(c, `SELECT version, feature_spec_hash, card, map_verification, promoted_at
+		FROM model_versions WHERE active`).Scan(&version, &hash, &card, &verification, &promoted)
+	if err != nil {
+		c.JSON(http.StatusOK, gin.H{"active": false, "message": "no model promoted yet"})
+		return
+	}
+	var cm, vm map[string]any
+	json.Unmarshal(card, &cm)
+	json.Unmarshal(verification, &vm)
+	c.JSON(http.StatusOK, gin.H{"active": true, "version": version, "feature_spec_hash": hash,
+		"promoted_at": promoted, "card": cm, "map_verification": vm})
+}
+
+// Stats feeds the dashboard: throughput, latency and outcomes over 24 h.
+func (s *Server) Stats(c *gin.Context) {
+	var active, queued, done24, failed24 int
+	var p50, p95 *float64
+	err := s.DB.QueryRow(c, `SELECT
+		count(*) FILTER (WHERE status IN ('QUEUED','RUNNING')),
+		count(*) FILTER (WHERE status = 'QUEUED'),
+		count(*) FILTER (WHERE status IN ('COMPLETED','PARTIAL') AND completed_at > now() - interval '24 hours'),
+		count(*) FILTER (WHERE status IN ('FAILED') AND completed_at > now() - interval '24 hours'),
+		percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM completed_at - created_at))
+			FILTER (WHERE status = 'COMPLETED' AND reused_from IS NULL AND completed_at > now() - interval '24 hours'),
+		percentile_cont(0.95) WITHIN GROUP (ORDER BY extract(epoch FROM completed_at - created_at))
+			FILTER (WHERE status = 'COMPLETED' AND reused_from IS NULL AND completed_at > now() - interval '24 hours')
+		FROM jobs`).Scan(&active, &queued, &done24, &failed24, &p50, &p95)
+	if err != nil {
+		fail(c, http.StatusInternalServerError, "database error")
+		return
+	}
+	perTask := []gin.H{}
+	rows, err := s.DB.Query(c, `SELECT task, state, count(*) FROM job_tasks t JOIN jobs j USING (job_id)
+		WHERE j.created_at > now() - interval '24 hours' GROUP BY task, state ORDER BY task, state`)
+	if err == nil {
+		defer rows.Close()
+		for rows.Next() {
+			var task, state string
+			var n int
+			if rows.Scan(&task, &state, &n) == nil {
+				perTask = append(perTask, gin.H{"task": task, "state": state, "count": n})
+			}
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{"active_jobs": active, "queued_jobs": queued, "completed_24h": done24,
+		"failed_24h": failed24, "latency_p50_s": p50, "latency_p95_s": p95, "tasks_24h": perTask,
+		"model_version": s.activeModel(c), "generated_at": time.Now().UTC()})
+}

@@ -1,0 +1,61 @@
+server {
+  listen 80;
+  root /usr/share/nginx/html;
+  set $gateway http://api_gateway:8000;
+
+  # Browser security headers (one place, every response)
+  add_header Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob: https://server.arcgisonline.com https://*.tile.openstreetmap.org ${STORAGE_ORIGIN}; connect-src 'self' ${STORAGE_ORIGIN}; worker-src 'self' blob:; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none';${CSP_EXTRA}" always;
+  add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+  add_header X-Content-Type-Options nosniff always;
+  add_header X-Frame-Options DENY always;
+  add_header Referrer-Policy strict-origin-when-cross-origin always;
+  add_header Permissions-Policy "geolocation=(self), camera=(), microphone=(), payment=(), usb=()" always;
+  add_header Cross-Origin-Opener-Policy same-origin always;
+
+  location = /healthz { return 200 "ok\n"; }
+
+  # Server-Sent Events: no buffering, long timeout
+  location ~ ^/api/jobs/[^/]+/events$ {
+    proxy_pass $gateway;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $client_ip;
+    proxy_set_header X-Forwarded-For "";
+    proxy_hide_header X-Frame-Options;          # set once, here, for every response
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3h;
+  }
+
+  location /api/ {
+    limit_req zone=api burst=60 nodelay;
+    limit_req_status 429;
+    proxy_pass $gateway;
+    proxy_http_version 1.1;
+    proxy_set_header Connection "";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $client_ip;
+    proxy_set_header X-Forwarded-For "";
+    proxy_hide_header X-Frame-Options;          # set once, here, for every response
+    proxy_hide_header X-Content-Type-Options;
+    proxy_hide_header Referrer-Policy;
+    proxy_set_header X-Request-ID $request_id;
+    proxy_connect_timeout 5s;
+    proxy_read_timeout 60s;
+  }
+
+  # NB: no add_header inside locations: it would drop every server-level security header.
+  location /assets/ {
+    expires 1y;               # hashed file names: cache for a year
+    try_files $uri =404;
+  }
+
+  location / {
+    expires -1;               # Cache-Control: no-cache for index.html (always revalidate)
+    try_files $uri $uri/ /index.html;
+  }
+}

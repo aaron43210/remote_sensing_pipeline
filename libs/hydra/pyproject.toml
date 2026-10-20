@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hydra"
+version = "1.0.0"
+description = "HydraNet feature spec, classical reference methods and ONNX runtime"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "scipy>=1.11", "numba>=0.59", "onnxruntime>=1.18"]
+
+[project.optional-dependencies]
+training = ["torch>=2.2", "onnx>=1.15", "prosail>=2.0", "pandas>=2.0"]
+
+[tool.setuptools.packages.find]
+include = ["hydra*"]
+
+[tool.setuptools.package-data]
+hydra = ["data/*.json", "data/usgs_library/*.csv"]

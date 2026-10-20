@@ -1,149 +1,314 @@
-version: '3.9'
+# HydraNet platform. Local: `docker compose --profile local up -d --build`
+# (MinIO + everything). AWS: docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d
+# (S3 instead of MinIO). Observability: add --profile obs. Batch pipelines: --profile batch.
+# Scale workers: docker compose up -d --scale ml_inference=4 (up to the topic's partitions).
 
-# =============================================================
-# OWNER: AARON
-# PRODUCTION Docker Compose — Lean 4-Service Architecture
-#
-# Services:
-#   Infrastructure:  Kafka, MinIO, Redis, PostgreSQL
-#   Go Services:     api_gateway, orchestrator
-#   Python Services: ingestion, preprocessing, ml_inference
-#   Frontend:        React/Vite
-# =============================================================
+name: hydranet
+
+x-python-env: &python-env
+  ENV: ${ENV:-local}
+  S3_BUCKET: ${S3_BUCKET:-hyperspectral-local}
+  S3_ENDPOINT_URL: ${S3_ENDPOINT_URL-http://minio:9000}
+  S3_REGION: ${S3_REGION:-us-west-2}
+  S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+  S3_CREATE_BUCKET: ${S3_CREATE_BUCKET:-true}
+  AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+  AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+  KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+  REDIS_URL: redis://redis:6379/0
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  METRICS_PORT: "9100"
+
+x-restart: &restart
+  restart: unless-stopped
+  security_opt: ["no-new-privileges:true"]
+
+# Go services: distroless, non-root, nothing to write -> read-only, no capabilities
+x-locked: &locked
+  read_only: true
+  cap_drop: [ALL]
+  tmpfs: [/tmp]
+
+x-depends-core: &depends-core
+  kafka-init: {condition: service_completed_successfully}
+  redis: {condition: service_healthy}
 
 services:
-
-  # ── Infrastructure ──────────────────────────────────────────
-  zookeeper:
-    image: confluentinc/cp-zookeeper:7.4.0
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-    networks: [prod-net]
-
+  # ── Data plane ──────────────────────────────────────────────────────────────
   kafka:
-    image: confluentinc/cp-kafka:7.4.0
-    depends_on: [zookeeper]
-    ports: ["9092:9092"]
+    <<: *restart
+    image: apache/kafka:3.8.0
     environment:
-      KAFKA_BROKER_ID: 1
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      # Only the 3 topics needed for the Hydra pipeline
-      KAFKA_CREATE_TOPICS: "raw-ingest-requests:4:1,preprocessed-multiband:8:1,ml-analyzed:4:1"
-    networks: [prod-net]
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_LOG_RETENTION_HOURS: 168
+      KAFKA_MESSAGE_MAX_BYTES: 4194304
+      KAFKA_HEAP_OPTS: "-Xms512m -Xmx1g"
+    volumes: [kafka_data:/var/lib/kafka/data]
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+    deploy: {resources: {limits: {memory: 1536m}}}
 
-  minio:
-    image: minio/minio:latest
-    ports: ["9000:9000", "9001:9001"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    command: server /data --console-address ":9001"
-    volumes: [minio_data:/data]
-    networks: [prod-net]
-
-  redis:
-    image: redis:7-alpine
-    ports: ["6379:6379"]
-    networks: [prod-net]
+  kafka-init:
+    image: apache/kafka:3.8.0
+    depends_on: {kafka: {condition: service_healthy}}
+    volumes: ["./infra/kafka/create-topics.sh:/create-topics.sh:ro"]
+    entrypoint: ["bash", "/create-topics.sh"]
+    environment: {KAFKA_BOOTSTRAP_SERVERS: "kafka:9092"}
+    restart: "no"
 
   postgres:
-    image: postgres:15
+    <<: *restart
+    image: imresamu/postgis:16-3.4
     environment:
       POSTGRES_USER: ${DB_USER:-spectral}
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-spectral123}
-      POSTGRES_DB: hyperspectral_db
-    ports: ["5433:5432"]
-    volumes: [postgres_data:/var/lib/postgresql/data]
-    networks: [prod-net]
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?set DB_PASSWORD in .env}
+      POSTGRES_DB: hyperspectral
+    command: ["postgres", "-c", "max_connections=300", "-c", "shared_buffers=256MB"]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/10-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-spectral} -d hyperspectral"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+    deploy: {resources: {limits: {memory: 1g}}}
 
-  # ── Go Services ─────────────────────────────────────────────
-  api_gateway:
-    build:
-      context: ./api_gateway
-      dockerfile: Dockerfile
-    ports: ["8000:8000"]
-    depends_on: [kafka, postgres, redis, minio]
+  redis:
+    <<: *restart
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    volumes: [redis_data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    deploy: {resources: {limits: {memory: 320m}}}
+
+  minio:
+    <<: *restart
+    profiles: [local]
+    build: {context: ./infra/minio}
+    image: hydranet/minio:RELEASE.2025-10-15T17-29-55Z
     environment:
-      PORT: 8000
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      REDIS_HOST: redis:6379
-      DATABASE_URL: postgres://${DB_USER:-spectral}:${DB_PASSWORD:-spectral123}@postgres:5432/hyperspectral_db
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      JWT_SECRET: ${JWT_SECRET:-change_me_in_prod}
-    networks: [prod-net]
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID (MinIO root user) in .env}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      MINIO_API_CORS_ALLOW_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
+    ports: ["9000:9000", "127.0.0.1:9001:9001"]   # 9000: browser fetches presigned map URLs; console: local only
+    volumes: [minio_data:/data]
+    deploy: {resources: {limits: {memory: 1g}}}
+
+  tools:
+    build: {context: ., dockerfile: tools/Dockerfile}
+    image: hydranet/tools:${TAG:-dev}
+    environment:
+      <<: *python-env
+      DATABASE_URL: postgresql://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/hyperspectral
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      MODEL_VERSION: ${MODEL_VERSION:-v1}
+    volumes: ["./training/artifacts:/artifacts:ro"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      api_gateway: {condition: service_healthy}
+    restart: "no"
+
+  # ── Control plane (Go) ──────────────────────────────────────────────────────
+  api_gateway:
+    <<: [*restart, *locked]
+    build: {context: ., dockerfile: api_gateway/Dockerfile}
+    image: hydranet/api_gateway:${TAG:-dev}
+    environment:
+      ENV: ${ENV:-local}
+      PORT: "8000"
+      DATABASE_URL: postgres://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/hyperspectral?sslmode=${DB_SSLMODE:-disable}
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      S3_BUCKET: ${S3_BUCKET:-hyperspectral-local}
+      S3_ENDPOINT_URL: ${S3_ENDPOINT_URL-http://minio:9000}
+      S3_PUBLIC_ENDPOINT_URL: ${S3_PUBLIC_ENDPOINT_URL-http://localhost:9000}
+      S3_REGION: ${S3_REGION:-us-west-2}
+      S3_FORCE_PATH_STYLE: ${S3_FORCE_PATH_STYLE:-true}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -hex 32)}
+      JWT_PREVIOUS_SECRET: ${JWT_PREVIOUS_SECRET:-}
+      ACCESS_TTL_MIN: ${ACCESS_TTL_MIN:-15}
+      REFRESH_TTL_DAYS: ${REFRESH_TTL_DAYS:-14}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      CLIENT_IP_HEADER: X-Real-IP
+      LOGIN_MAX_FAILURES: ${LOGIN_MAX_FAILURES:-10}
+      PRESIGN_TTL_MIN: ${PRESIGN_TTL_MIN:-15}
+      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:3000},http://localhost:5173
+      ALLOWED_REGION: ${ALLOWED_REGION:--124.5,32.5,-114.0,42.0}
+      ALLOW_FIXTURES: ${ALLOW_FIXTURES:-true}
+      MAX_ACTIVE_JOBS_PER_USER: ${MAX_ACTIVE_JOBS_PER_USER:-3}
+      MAX_QUEUED_JOBS: ${MAX_QUEUED_JOBS:-500}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-120}
+      AUTH_RATE_LIMIT_PER_MIN: ${AUTH_RATE_LIMIT_PER_MIN:-20}
+    depends_on:
+      <<: *depends-core
+      postgres: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "/api_gateway", "-healthcheck"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    deploy: {replicas: 2, resources: {limits: {memory: 256m}}}
 
   orchestrator:
-    build:
-      context: ./orchestrator
-      dockerfile: Dockerfile
-    depends_on: [kafka, redis]
+    <<: [*restart, *locked]
+    build: {context: ., dockerfile: orchestrator/Dockerfile}
+    image: hydranet/orchestrator:${TAG:-dev}
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      REDIS_HOST: redis:6379
-    networks: [prod-net]
+      DATABASE_URL: postgres://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/hyperspectral?sslmode=${DB_SSLMODE:-disable}
+      REDIS_URL: redis://redis:6379/0
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      METRICS_PORT: "9100"
+    depends_on:
+      <<: *depends-core
+      postgres: {condition: service_healthy}
+    deploy: {replicas: 1, resources: {limits: {memory: 256m}}}
 
-  # ── Python Services ──────────────────────────────────────────
+  # ── Workers (Python) ────────────────────────────────────────────────────────
   ingestion:
-    build:
-      context: ./ingestion
-      dockerfile: Dockerfile
-    depends_on: [kafka, minio]
+    <<: *restart
+    cap_drop: [ALL]
+    build: {context: ., dockerfile: ingestion/Dockerfile}
+    image: hydranet/ingestion:${TAG:-dev}
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    networks: [prod-net]
+      <<: *python-env
+      SERVICE_NAME: ingestion
+      EARTHDATA_TOKEN: ${EARTHDATA_TOKEN:-}
+      EARTHDATA_USERNAME: ${EARTHDATA_USERNAME:-}
+      EARTHDATA_PASSWORD: ${EARTHDATA_PASSWORD:-}
+    depends_on: *depends-core
+    deploy: {replicas: 2, resources: {limits: {memory: 3g}}}
 
   preprocessing:
-    build:
-      context: ./preprocessing
-      dockerfile: Dockerfile
-    depends_on: [kafka, minio]
-    environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-    deploy:
-      replicas: 4
-    networks: [prod-net]
+    <<: *restart
+    cap_drop: [ALL]
+    build: {context: ., dockerfile: preprocessing/Dockerfile}
+    image: hydranet/preprocessing:${TAG:-dev}
+    environment: {<<: *python-env, SERVICE_NAME: preprocessing}
+    depends_on: *depends-core
+    deploy: {replicas: 2, resources: {limits: {memory: 2g}}}
+
+  preprocessing-thermal:
+    <<: *restart
+    cap_drop: [ALL]
+    image: hydranet/preprocessing:${TAG:-dev}
+    command: ["python", "service.py", "thermal"]
+    environment: {<<: *python-env, SERVICE_NAME: preprocessing-thermal}
+    depends_on: {<<: *depends-core, preprocessing: {condition: service_started}}
+    deploy: {replicas: 1, resources: {limits: {memory: 1g}}}
 
   ml_inference:
-    build:
-      context: ./ml_inference
-      dockerfile: Dockerfile
-    depends_on: [kafka, minio]
+    <<: *restart
+    cap_drop: [ALL]
+    build: {context: ., dockerfile: ml_inference/Dockerfile}
+    image: hydranet/ml_inference:${TAG:-dev}
     environment:
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER:-minioadmin}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD:-minioadmin}
-      MODEL_WEIGHTS: /app/hydra_weights.pth
-    deploy:
-      replicas: 2
-    networks: [prod-net]
+      <<: *python-env
+      SERVICE_NAME: ml_inference
+      SHADOW_SAMPLE_PIXELS: ${SHADOW_SAMPLE_PIXELS:-1500}
+      ORT_THREADS: "2"
+    depends_on: *depends-core
+    deploy: {replicas: 2, resources: {limits: {memory: 2g}}}
 
-  # ── Frontend ─────────────────────────────────────────────────
+  event_sink:
+    <<: *restart
+    cap_drop: [ALL]
+    build: {context: ., dockerfile: event_sink/Dockerfile}
+    image: hydranet/event_sink:${TAG:-dev}
+    environment: {<<: *python-env, SERVICE_NAME: event_sink}
+    depends_on: *depends-core
+    deploy: {resources: {limits: {memory: 512m}}}
+
+  # ── Edge: SPA + reverse proxy ───────────────────────────────────────────────
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
-    ports: ["3000:80"]
+    <<: *restart
+    build: {context: ., dockerfile: frontend/Dockerfile}
+    image: hydranet/frontend:${TAG:-dev}
+    ports: ["${FRONTEND_PORT:-3000}:80"]
     environment:
-      VITE_API_URL: http://api_gateway:8000
-    networks: [prod-net]
+      TRUST_CLOUDFRONT: ${TRUST_CLOUDFRONT:-off}
+      STORAGE_ORIGIN: ${STORAGE_ORIGIN:-http://localhost:9000}
+      CSP_EXTRA: ${CSP_EXTRA:-}
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE, DAC_OVERRIDE]
+    depends_on: [api_gateway]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/healthz"]
+      interval: 15s
+      timeout: 3s
+    deploy: {resources: {limits: {memory: 128m}}}
+
+  # ── Batch (Dagster) ─────────────────────────────────────────────────────────
+  dagster:
+    <<: *restart
+    profiles: [batch]
+    build: {context: ., dockerfile: pipelines/Dockerfile}
+    image: hydranet/pipelines:${TAG:-dev}
+    environment:
+      <<: *python-env
+      SERVICE_NAME: pipelines
+      DATABASE_URL: postgresql://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/hyperspectral
+      DAGSTER_PG_URL: postgresql://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/dagster
+      EARTHDATA_TOKEN: ${EARTHDATA_TOKEN:-}
+      EARTHDATA_USERNAME: ${EARTHDATA_USERNAME:-}
+      EARTHDATA_PASSWORD: ${EARTHDATA_PASSWORD:-}
+      CATALOG_REGION: ${ALLOWED_REGION:--124.5,32.5,-114.0,42.0}
+    ports: ["127.0.0.1:3001:3000"]
+    depends_on: {postgres: {condition: service_healthy}}
+    deploy: {resources: {limits: {memory: 2g}}}
+
+  # ── Observability ───────────────────────────────────────────────────────────
+  prometheus:
+    <<: *restart
+    profiles: [obs]
+    image: prom/prometheus:v2.54.1
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=15d"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus_data:/prometheus
+    ports: ["127.0.0.1:9090:9090"]
+
+  grafana:
+    <<: *restart
+    profiles: [obs]
+    image: grafana/grafana:11.2.2
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      DB_USER: ${DB_USER:-spectral}
+      DB_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports: ["127.0.0.1:3002:3000"]
 
 volumes:
-  minio_data:
+  kafka_data:
   postgres_data:
-
-networks:
-  prod-net:
-    driver: bridge
+  redis_data:
+  minio_data:
+  prometheus_data:
+  grafana_data:

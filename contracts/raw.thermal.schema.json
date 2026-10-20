@@ -1,0 +1,86 @@
+{
+  "description": "raw.thermal: ingestion -> preprocessing-thermal.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "scene_id": {
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "acquired_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acquired At"
+    },
+    "st_key": {
+      "title": "St Key",
+      "type": "string"
+    },
+    "qa_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Qa Key"
+    },
+    "mtl_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Mtl Key"
+    },
+    "bbox": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Bbox",
+      "type": "array"
+    },
+    "source": {
+      "default": "nasa",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "scene_id",
+    "st_key",
+    "bbox"
+  ],
+  "title": "RawThermal",
+  "type": "object"
+}

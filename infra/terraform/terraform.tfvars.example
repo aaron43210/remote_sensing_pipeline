@@ -1,0 +1,5 @@
+name        = "yourname"          # bucket = hyperspectral-yourname-prod
+alert_email = "you@example.com"
+admin_email = "you@example.com"
+github_repo = "aaron43210/remote_sensing_pipeline"
+# earthdata_token = "..."          # or set later in SSM: /hydranet/prod/EARTHDATA_TOKEN
