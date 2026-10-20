@@ -1,0 +1,90 @@
+{
+  "description": "job.status: every service -> orchestrator.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "stage": {
+      "enum": [
+        "queued",
+        "ingest",
+        "preprocess",
+        "inference",
+        "done"
+      ],
+      "title": "Stage",
+      "type": "string"
+    },
+    "task": {
+      "anyOf": [
+        {
+          "enum": [
+            "agriculture",
+            "mineral",
+            "thermal"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Task"
+    },
+    "state": {
+      "enum": [
+        "RUNNING",
+        "DONE",
+        "ERROR",
+        "NO_DATA",
+        "RETRYING"
+      ],
+      "title": "State",
+      "type": "string"
+    },
+    "message": {
+      "default": "",
+      "title": "Message",
+      "type": "string"
+    },
+    "service": {
+      "default": "",
+      "title": "Service",
+      "type": "string"
+    },
+    "progress": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Progress"
+    }
+  },
+  "required": [
+    "job_id",
+    "stage",
+    "state"
+  ],
+  "title": "JobStatus",
+  "type": "object"
+}

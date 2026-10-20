@@ -1,0 +1,29 @@
+name: train
+on:
+  workflow_dispatch:
+    inputs:
+      version: {description: "model version, e.g. v2", required: true}
+      promote: {description: "promote if every gate passes", type: boolean, default: false}
+permissions: {id-token: write, contents: read}
+jobs:
+  train:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.11"}
+      - run: pip install -c constraints.txt "./libs/hs_common[geo]" "./libs/hydra[training]" pandas "psycopg[binary]" "torch==2.5.1" --extra-index-url https://download.pytorch.org/whl/cpu
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: {role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE }}", aws-region: us-west-2}
+      - name: datasets (raw CSVs from the lake), training, ONNX export, gates
+        env: {S3_BUCKET: "${{ secrets.S3_BUCKET }}", S3_REGION: us-west-2}
+        run: |
+          mkdir -p raw && aws s3 sync s3://$S3_BUCKET/gold/training/raw/ raw/
+          cd training
+          python -m datagen --out artifacts/data --data-root ../raw
+          python -m train --version ${{ inputs.version }} --out artifacts/models
+          python -m verify_maps --model artifacts/models/${{ inputs.version }} --data artifacts/data
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: "hydranet-${{ inputs.version }}", path: "training/artifacts/models/${{ inputs.version }}"}

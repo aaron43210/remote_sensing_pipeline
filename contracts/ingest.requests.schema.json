@@ -1,0 +1,93 @@
+{
+  "description": "ingest.requests: gateway -> ingestion.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "user_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "User Id"
+    },
+    "bbox": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Bbox",
+      "type": "array"
+    },
+    "tasks": {
+      "items": {
+        "enum": [
+          "agriculture",
+          "mineral",
+          "thermal"
+        ],
+        "type": "string"
+      },
+      "title": "Tasks",
+      "type": "array"
+    },
+    "date_from": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Date From"
+    },
+    "date_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Date To"
+    },
+    "source": {
+      "default": "nasa",
+      "enum": [
+        "nasa",
+        "fixture"
+      ],
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "bbox",
+    "tasks"
+  ],
+  "title": "IngestRequest",
+  "type": "object"
+}

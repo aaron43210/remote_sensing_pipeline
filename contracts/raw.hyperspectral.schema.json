@@ -1,0 +1,152 @@
+{
+  "$defs": {
+    "Georef": {
+      "properties": {
+        "crs": {
+          "default": "EPSG:4326",
+          "title": "Crs",
+          "type": "string"
+        },
+        "transform": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Transform",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "transform",
+        "width",
+        "height"
+      ],
+      "title": "Georef",
+      "type": "object"
+    }
+  },
+  "description": "raw.hyperspectral: ingestion -> preprocessing.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "satellite": {
+      "default": "EMIT",
+      "title": "Satellite",
+      "type": "string"
+    },
+    "granule_id": {
+      "title": "Granule Id",
+      "type": "string"
+    },
+    "acquired_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acquired At"
+    },
+    "zarr_key": {
+      "title": "Zarr Key",
+      "type": "string"
+    },
+    "wavelengths": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Wavelengths",
+      "type": "array"
+    },
+    "good_bands": {
+      "anyOf": [
+        {
+          "items": {
+            "type": "boolean"
+          },
+          "type": "array"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Good Bands"
+    },
+    "cloud_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cloud Key"
+    },
+    "georef": {
+      "$ref": "#/$defs/Georef"
+    },
+    "bbox": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Bbox",
+      "type": "array"
+    },
+    "tasks": {
+      "items": {
+        "enum": [
+          "agriculture",
+          "mineral",
+          "thermal"
+        ],
+        "type": "string"
+      },
+      "title": "Tasks",
+      "type": "array"
+    },
+    "source": {
+      "default": "nasa",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "granule_id",
+    "zarr_key",
+    "wavelengths",
+    "georef",
+    "bbox",
+    "tasks"
+  ],
+  "title": "RawHyperspectral",
+  "type": "object"
+}

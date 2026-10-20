@@ -1,0 +1,5 @@
+{
+  "venvPath": "/Users/aaronr",
+  "venv": "py311",
+  "extraPaths": ["libs/hydra", "libs/hs_common", "training"]
+}

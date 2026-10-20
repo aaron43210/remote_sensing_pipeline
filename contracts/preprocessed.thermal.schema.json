@@ -1,0 +1,105 @@
+{
+  "$defs": {
+    "Georef": {
+      "properties": {
+        "crs": {
+          "default": "EPSG:4326",
+          "title": "Crs",
+          "type": "string"
+        },
+        "transform": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Transform",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "transform",
+        "width",
+        "height"
+      ],
+      "title": "Georef",
+      "type": "object"
+    }
+  },
+  "description": "preprocessed.thermal: preprocessing-thermal -> ml_inference.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "scene_id": {
+      "title": "Scene Id",
+      "type": "string"
+    },
+    "acquired_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acquired At"
+    },
+    "lst_key": {
+      "title": "Lst Key",
+      "type": "string"
+    },
+    "georef": {
+      "$ref": "#/$defs/Georef"
+    },
+    "bbox": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Bbox",
+      "type": "array"
+    },
+    "stats": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Stats",
+      "type": "object"
+    },
+    "source": {
+      "default": "nasa",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "scene_id",
+    "lst_key",
+    "georef",
+    "bbox"
+  ],
+  "title": "PreprocessedThermal",
+  "type": "object"
+}

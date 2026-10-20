@@ -1,0 +1,25 @@
+name: deploy
+on:
+  workflow_dispatch:
+    inputs:
+      tag: {description: "image tag (a released v* tag)", required: true}
+permissions: {id-token: write, contents: read}
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ inputs.tag }}"}
+      - uses: aws-actions/configure-aws-credentials@v4
+        with: {role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE }}", aws-region: us-west-2}
+      - name: ship compose files and run deploy.sh over SSM
+        run: |
+          B64=$(tar czf - docker-compose.yml docker-compose.aws.yml infra/kafka infra/postgres infra/prometheus infra/grafana scripts/deploy.sh | base64 -w0)
+          CMD_ID=$(aws ssm send-command --instance-ids "${{ secrets.INSTANCE_ID }}" --document-name AWS-RunShellScript \
+            --parameters "commands=[\"cd /opt/hydranet && echo $B64 | base64 -d | tar xzf - && bash scripts/deploy.sh ${{ inputs.tag }}\"]" \
+            --query Command.CommandId --output text)
+          aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "${{ secrets.INSTANCE_ID }}" || true
+          aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ secrets.INSTANCE_ID }}" \
+            --query '[Status,StandardOutputContent,StandardErrorContent]' --output text
+          test "$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "${{ secrets.INSTANCE_ID }}" --query Status --output text)" = Success

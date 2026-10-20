@@ -14,3 +14,13 @@ node_modules/
 dist/
 build/
 *.log
+
+# terraform
+**/.terraform/
+*.tfstate*
+*.tfvars
+!*.tfvars.example
+# training artifacts and local tooling
+training/artifacts/
+frontend/node_modules/
+*.egg-info/

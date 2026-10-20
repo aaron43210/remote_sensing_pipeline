@@ -1,0 +1,1430 @@
+{
+"source": "NASA EMIT L2A band table (band_metadata.json from services/mineral_analysis)",
+"bands": [
+{
+"index": 1,
+"wavelength_nm": 380.8578796386719,
+"good": true
+},
+{
+"index": 2,
+"wavelength_nm": 388.261474609375,
+"good": true
+},
+{
+"index": 3,
+"wavelength_nm": 395.6680908203125,
+"good": true
+},
+{
+"index": 4,
+"wavelength_nm": 403.07769775390625,
+"good": true
+},
+{
+"index": 5,
+"wavelength_nm": 410.4902648925781,
+"good": true
+},
+{
+"index": 6,
+"wavelength_nm": 417.9058532714844,
+"good": true
+},
+{
+"index": 7,
+"wavelength_nm": 425.3244323730469,
+"good": true
+},
+{
+"index": 8,
+"wavelength_nm": 432.7449951171875,
+"good": true
+},
+{
+"index": 9,
+"wavelength_nm": 440.1695251464844,
+"good": true
+},
+{
+"index": 10,
+"wavelength_nm": 447.5950927734375,
+"good": true
+},
+{
+"index": 11,
+"wavelength_nm": 455.0226135253906,
+"good": true
+},
+{
+"index": 12,
+"wavelength_nm": 462.4511413574219,
+"good": true
+},
+{
+"index": 13,
+"wavelength_nm": 469.8826904296875,
+"good": true
+},
+{
+"index": 14,
+"wavelength_nm": 477.315185546875,
+"good": true
+},
+{
+"index": 15,
+"wavelength_nm": 484.74969482421875,
+"good": true
+},
+{
+"index": 16,
+"wavelength_nm": 492.1852111816406,
+"good": true
+},
+{
+"index": 17,
+"wavelength_nm": 499.6236877441406,
+"good": true
+},
+{
+"index": 18,
+"wavelength_nm": 507.06219482421875,
+"good": true
+},
+{
+"index": 19,
+"wavelength_nm": 514.502685546875,
+"good": true
+},
+{
+"index": 20,
+"wavelength_nm": 521.9431762695312,
+"good": true
+},
+{
+"index": 21,
+"wavelength_nm": 529.3856201171875,
+"good": true
+},
+{
+"index": 22,
+"wavelength_nm": 536.8291015625,
+"good": true
+},
+{
+"index": 23,
+"wavelength_nm": 544.2735595703125,
+"good": true
+},
+{
+"index": 24,
+"wavelength_nm": 551.718994140625,
+"good": true
+},
+{
+"index": 25,
+"wavelength_nm": 559.1664428710938,
+"good": true
+},
+{
+"index": 26,
+"wavelength_nm": 566.6138916015625,
+"good": true
+},
+{
+"index": 27,
+"wavelength_nm": 574.0613403320312,
+"good": true
+},
+{
+"index": 28,
+"wavelength_nm": 581.5108032226562,
+"good": true
+},
+{
+"index": 29,
+"wavelength_nm": 588.960205078125,
+"good": true
+},
+{
+"index": 30,
+"wavelength_nm": 596.41064453125,
+"good": true
+},
+{
+"index": 31,
+"wavelength_nm": 603.862060546875,
+"good": true
+},
+{
+"index": 32,
+"wavelength_nm": 611.3145141601562,
+"good": true
+},
+{
+"index": 33,
+"wavelength_nm": 618.7669067382812,
+"good": true
+},
+{
+"index": 34,
+"wavelength_nm": 626.2203369140625,
+"good": true
+},
+{
+"index": 35,
+"wavelength_nm": 633.6737670898438,
+"good": true
+},
+{
+"index": 36,
+"wavelength_nm": 641.128173828125,
+"good": true
+},
+{
+"index": 37,
+"wavelength_nm": 648.5825805664062,
+"good": true
+},
+{
+"index": 38,
+"wavelength_nm": 656.0379638671875,
+"good": true
+},
+{
+"index": 39,
+"wavelength_nm": 663.493408203125,
+"good": true
+},
+{
+"index": 40,
+"wavelength_nm": 670.9497680664062,
+"good": true
+},
+{
+"index": 41,
+"wavelength_nm": 678.4061889648438,
+"good": true
+},
+{
+"index": 42,
+"wavelength_nm": 685.8626098632812,
+"good": true
+},
+{
+"index": 43,
+"wavelength_nm": 693.3200073242188,
+"good": true
+},
+{
+"index": 44,
+"wavelength_nm": 700.7774047851562,
+"good": true
+},
+{
+"index": 45,
+"wavelength_nm": 708.2357788085938,
+"good": true
+},
+{
+"index": 46,
+"wavelength_nm": 715.6931762695312,
+"good": true
+},
+{
+"index": 47,
+"wavelength_nm": 723.151611328125,
+"good": true
+},
+{
+"index": 48,
+"wavelength_nm": 730.6109619140625,
+"good": true
+},
+{
+"index": 49,
+"wavelength_nm": 738.0693969726562,
+"good": true
+},
+{
+"index": 50,
+"wavelength_nm": 745.52880859375,
+"good": true
+},
+{
+"index": 51,
+"wavelength_nm": 752.9882202148438,
+"good": true
+},
+{
+"index": 52,
+"wavelength_nm": 760.4486083984375,
+"good": true
+},
+{
+"index": 53,
+"wavelength_nm": 767.9080200195312,
+"good": true
+},
+{
+"index": 54,
+"wavelength_nm": 775.368408203125,
+"good": true
+},
+{
+"index": 55,
+"wavelength_nm": 782.8297729492188,
+"good": true
+},
+{
+"index": 56,
+"wavelength_nm": 790.2902221679688,
+"good": true
+},
+{
+"index": 57,
+"wavelength_nm": 797.7516479492188,
+"good": true
+},
+{
+"index": 58,
+"wavelength_nm": 805.2140502929688,
+"good": true
+},
+{
+"index": 59,
+"wavelength_nm": 812.6754150390625,
+"good": true
+},
+{
+"index": 60,
+"wavelength_nm": 820.1368408203125,
+"good": true
+},
+{
+"index": 61,
+"wavelength_nm": 827.5982666015625,
+"good": true
+},
+{
+"index": 62,
+"wavelength_nm": 835.0596923828125,
+"good": true
+},
+{
+"index": 63,
+"wavelength_nm": 842.5220947265625,
+"good": true
+},
+{
+"index": 64,
+"wavelength_nm": 849.9835205078125,
+"good": true
+},
+{
+"index": 65,
+"wavelength_nm": 857.4459838867188,
+"good": true
+},
+{
+"index": 66,
+"wavelength_nm": 864.9074096679688,
+"good": true
+},
+{
+"index": 67,
+"wavelength_nm": 872.369873046875,
+"good": true
+},
+{
+"index": 68,
+"wavelength_nm": 879.832275390625,
+"good": true
+},
+{
+"index": 69,
+"wavelength_nm": 887.2937622070312,
+"good": true
+},
+{
+"index": 70,
+"wavelength_nm": 894.7562255859375,
+"good": true
+},
+{
+"index": 71,
+"wavelength_nm": 902.2186889648438,
+"good": true
+},
+{
+"index": 72,
+"wavelength_nm": 909.68115234375,
+"good": true
+},
+{
+"index": 73,
+"wavelength_nm": 917.1436157226562,
+"good": true
+},
+{
+"index": 74,
+"wavelength_nm": 924.6060791015625,
+"good": true
+},
+{
+"index": 75,
+"wavelength_nm": 932.0685424804688,
+"good": true
+},
+{
+"index": 76,
+"wavelength_nm": 939.5310668945312,
+"good": true
+},
+{
+"index": 77,
+"wavelength_nm": 946.9925537109375,
+"good": true
+},
+{
+"index": 78,
+"wavelength_nm": 954.4550170898438,
+"good": true
+},
+{
+"index": 79,
+"wavelength_nm": 961.91650390625,
+"good": true
+},
+{
+"index": 80,
+"wavelength_nm": 969.3790283203125,
+"good": true
+},
+{
+"index": 81,
+"wavelength_nm": 976.840576171875,
+"good": true
+},
+{
+"index": 82,
+"wavelength_nm": 984.3020629882812,
+"good": true
+},
+{
+"index": 83,
+"wavelength_nm": 991.7636108398438,
+"good": true
+},
+{
+"index": 84,
+"wavelength_nm": 999.2251586914062,
+"good": true
+},
+{
+"index": 85,
+"wavelength_nm": 1006.6867065429688,
+"good": true
+},
+{
+"index": 86,
+"wavelength_nm": 1014.1472778320312,
+"good": true
+},
+{
+"index": 87,
+"wavelength_nm": 1021.6088256835938,
+"good": true
+},
+{
+"index": 88,
+"wavelength_nm": 1029.0694580078125,
+"good": true
+},
+{
+"index": 89,
+"wavelength_nm": 1036.530029296875,
+"good": true
+},
+{
+"index": 90,
+"wavelength_nm": 1043.9906005859375,
+"good": true
+},
+{
+"index": 91,
+"wavelength_nm": 1051.451171875,
+"good": true
+},
+{
+"index": 92,
+"wavelength_nm": 1058.9117431640625,
+"good": true
+},
+{
+"index": 93,
+"wavelength_nm": 1066.3724365234375,
+"good": true
+},
+{
+"index": 94,
+"wavelength_nm": 1073.83203125,
+"good": true
+},
+{
+"index": 95,
+"wavelength_nm": 1081.292724609375,
+"good": true
+},
+{
+"index": 96,
+"wavelength_nm": 1088.7523193359375,
+"good": true
+},
+{
+"index": 97,
+"wavelength_nm": 1096.2120361328125,
+"good": true
+},
+{
+"index": 98,
+"wavelength_nm": 1103.670654296875,
+"good": true
+},
+{
+"index": 99,
+"wavelength_nm": 1111.13037109375,
+"good": true
+},
+{
+"index": 100,
+"wavelength_nm": 1118.5889892578125,
+"good": true
+},
+{
+"index": 101,
+"wavelength_nm": 1126.0487060546875,
+"good": true
+},
+{
+"index": 102,
+"wavelength_nm": 1133.5074462890625,
+"good": true
+},
+{
+"index": 103,
+"wavelength_nm": 1140.9652099609375,
+"good": true
+},
+{
+"index": 104,
+"wavelength_nm": 1148.4239501953125,
+"good": true
+},
+{
+"index": 105,
+"wavelength_nm": 1155.8826904296875,
+"good": true
+},
+{
+"index": 106,
+"wavelength_nm": 1163.3404541015625,
+"good": true
+},
+{
+"index": 107,
+"wavelength_nm": 1170.7982177734375,
+"good": true
+},
+{
+"index": 108,
+"wavelength_nm": 1178.2559814453125,
+"good": true
+},
+{
+"index": 109,
+"wavelength_nm": 1185.7138671875,
+"good": true
+},
+{
+"index": 110,
+"wavelength_nm": 1193.170654296875,
+"good": true
+},
+{
+"index": 111,
+"wavelength_nm": 1200.62841796875,
+"good": true
+},
+{
+"index": 112,
+"wavelength_nm": 1208.0853271484375,
+"good": true
+},
+{
+"index": 113,
+"wavelength_nm": 1215.5421142578125,
+"good": true
+},
+{
+"index": 114,
+"wavelength_nm": 1222.9990234375,
+"good": true
+},
+{
+"index": 115,
+"wavelength_nm": 1230.4559326171875,
+"good": true
+},
+{
+"index": 116,
+"wavelength_nm": 1237.9117431640625,
+"good": true
+},
+{
+"index": 117,
+"wavelength_nm": 1245.36767578125,
+"good": true
+},
+{
+"index": 118,
+"wavelength_nm": 1252.8245849609375,
+"good": true
+},
+{
+"index": 119,
+"wavelength_nm": 1260.2806396484375,
+"good": true
+},
+{
+"index": 120,
+"wavelength_nm": 1267.735595703125,
+"good": true
+},
+{
+"index": 121,
+"wavelength_nm": 1275.1915283203125,
+"good": true
+},
+{
+"index": 122,
+"wavelength_nm": 1282.646484375,
+"good": true
+},
+{
+"index": 123,
+"wavelength_nm": 1290.1025390625,
+"good": true
+},
+{
+"index": 124,
+"wavelength_nm": 1297.5574951171875,
+"good": true
+},
+{
+"index": 125,
+"wavelength_nm": 1305.0125732421875,
+"good": true
+},
+{
+"index": 126,
+"wavelength_nm": 1312.4666748046875,
+"good": true
+},
+{
+"index": 127,
+"wavelength_nm": 1319.920654296875,
+"good": true
+},
+{
+"index": 128,
+"wavelength_nm": 1327.374755859375,
+"good": true
+},
+{
+"index": 129,
+"wavelength_nm": 1334.827880859375,
+"good": true
+},
+{
+"index": 130,
+"wavelength_nm": 1342.281005859375,
+"good": true
+},
+{
+"index": 131,
+"wavelength_nm": 1349.734130859375,
+"good": true
+},
+{
+"index": 132,
+"wavelength_nm": 1357.187255859375,
+"good": true
+},
+{
+"index": 133,
+"wavelength_nm": 1364.6395263671875,
+"good": false
+},
+{
+"index": 134,
+"wavelength_nm": 1372.0906982421875,
+"good": false
+},
+{
+"index": 135,
+"wavelength_nm": 1379.5428466796875,
+"good": false
+},
+{
+"index": 136,
+"wavelength_nm": 1386.994140625,
+"good": false
+},
+{
+"index": 137,
+"wavelength_nm": 1394.4454345703125,
+"good": false
+},
+{
+"index": 138,
+"wavelength_nm": 1401.8956298828125,
+"good": false
+},
+{
+"index": 139,
+"wavelength_nm": 1409.345947265625,
+"good": false
+},
+{
+"index": 140,
+"wavelength_nm": 1416.7962646484375,
+"good": true
+},
+{
+"index": 141,
+"wavelength_nm": 1424.24560546875,
+"good": true
+},
+{
+"index": 142,
+"wavelength_nm": 1431.6949462890625,
+"good": true
+},
+{
+"index": 143,
+"wavelength_nm": 1439.144287109375,
+"good": true
+},
+{
+"index": 144,
+"wavelength_nm": 1446.5926513671875,
+"good": true
+},
+{
+"index": 145,
+"wavelength_nm": 1454.0411376953125,
+"good": true
+},
+{
+"index": 146,
+"wavelength_nm": 1461.489501953125,
+"good": true
+},
+{
+"index": 147,
+"wavelength_nm": 1468.93701171875,
+"good": true
+},
+{
+"index": 148,
+"wavelength_nm": 1476.3843994140625,
+"good": true
+},
+{
+"index": 149,
+"wavelength_nm": 1483.8319091796875,
+"good": true
+},
+{
+"index": 150,
+"wavelength_nm": 1491.2784423828125,
+"good": true
+},
+{
+"index": 151,
+"wavelength_nm": 1498.7249755859375,
+"good": true
+},
+{
+"index": 152,
+"wavelength_nm": 1506.1715087890625,
+"good": true
+},
+{
+"index": 153,
+"wavelength_nm": 1513.6170654296875,
+"good": true
+},
+{
+"index": 154,
+"wavelength_nm": 1521.062744140625,
+"good": true
+},
+{
+"index": 155,
+"wavelength_nm": 1528.50732421875,
+"good": true
+},
+{
+"index": 156,
+"wavelength_nm": 1535.9530029296875,
+"good": true
+},
+{
+"index": 157,
+"wavelength_nm": 1543.397705078125,
+"good": true
+},
+{
+"index": 158,
+"wavelength_nm": 1550.8414306640625,
+"good": true
+},
+{
+"index": 159,
+"wavelength_nm": 1558.2850341796875,
+"good": true
+},
+{
+"index": 160,
+"wavelength_nm": 1565.7288818359375,
+"good": true
+},
+{
+"index": 161,
+"wavelength_nm": 1573.171630859375,
+"good": true
+},
+{
+"index": 162,
+"wavelength_nm": 1580.6143798828125,
+"good": true
+},
+{
+"index": 163,
+"wavelength_nm": 1588.0572509765625,
+"good": true
+},
+{
+"index": 164,
+"wavelength_nm": 1595.4990234375,
+"good": true
+},
+{
+"index": 165,
+"wavelength_nm": 1602.94091796875,
+"good": true
+},
+{
+"index": 166,
+"wavelength_nm": 1610.3818359375,
+"good": true
+},
+{
+"index": 167,
+"wavelength_nm": 1617.82275390625,
+"good": true
+},
+{
+"index": 168,
+"wavelength_nm": 1625.2626953125,
+"good": true
+},
+{
+"index": 169,
+"wavelength_nm": 1632.70361328125,
+"good": true
+},
+{
+"index": 170,
+"wavelength_nm": 1640.142578125,
+"good": true
+},
+{
+"index": 171,
+"wavelength_nm": 1647.5826416015625,
+"good": true
+},
+{
+"index": 172,
+"wavelength_nm": 1655.021728515625,
+"good": true
+},
+{
+"index": 173,
+"wavelength_nm": 1662.459716796875,
+"good": true
+},
+{
+"index": 174,
+"wavelength_nm": 1669.8978271484375,
+"good": true
+},
+{
+"index": 175,
+"wavelength_nm": 1677.3359375,
+"good": true
+},
+{
+"index": 176,
+"wavelength_nm": 1684.7730712890625,
+"good": true
+},
+{
+"index": 177,
+"wavelength_nm": 1692.2103271484375,
+"good": true
+},
+{
+"index": 178,
+"wavelength_nm": 1699.6474609375,
+"good": true
+},
+{
+"index": 179,
+"wavelength_nm": 1707.083740234375,
+"good": true
+},
+{
+"index": 180,
+"wavelength_nm": 1714.51904296875,
+"good": true
+},
+{
+"index": 181,
+"wavelength_nm": 1721.955322265625,
+"good": true
+},
+{
+"index": 182,
+"wavelength_nm": 1729.390625,
+"good": true
+},
+{
+"index": 183,
+"wavelength_nm": 1736.824951171875,
+"good": true
+},
+{
+"index": 184,
+"wavelength_nm": 1744.25927734375,
+"good": true
+},
+{
+"index": 185,
+"wavelength_nm": 1751.6937255859375,
+"good": true
+},
+{
+"index": 186,
+"wavelength_nm": 1759.127197265625,
+"good": true
+},
+{
+"index": 187,
+"wavelength_nm": 1766.5606689453125,
+"good": true
+},
+{
+"index": 188,
+"wavelength_nm": 1773.994140625,
+"good": true
+},
+{
+"index": 189,
+"wavelength_nm": 1781.4266357421875,
+"good": true
+},
+{
+"index": 190,
+"wavelength_nm": 1788.8592529296875,
+"good": true
+},
+{
+"index": 191,
+"wavelength_nm": 1796.290771484375,
+"good": true
+},
+{
+"index": 192,
+"wavelength_nm": 1803.722412109375,
+"good": false
+},
+{
+"index": 193,
+"wavelength_nm": 1811.153076171875,
+"good": false
+},
+{
+"index": 194,
+"wavelength_nm": 1818.583740234375,
+"good": false
+},
+{
+"index": 195,
+"wavelength_nm": 1826.013427734375,
+"good": false
+},
+{
+"index": 196,
+"wavelength_nm": 1833.443115234375,
+"good": false
+},
+{
+"index": 197,
+"wavelength_nm": 1840.8729248046875,
+"good": false
+},
+{
+"index": 198,
+"wavelength_nm": 1848.3017578125,
+"good": false
+},
+{
+"index": 199,
+"wavelength_nm": 1855.7296142578125,
+"good": false
+},
+{
+"index": 200,
+"wavelength_nm": 1863.157470703125,
+"good": false
+},
+{
+"index": 201,
+"wavelength_nm": 1870.5853271484375,
+"good": false
+},
+{
+"index": 202,
+"wavelength_nm": 1878.0123291015625,
+"good": false
+},
+{
+"index": 203,
+"wavelength_nm": 1885.439208984375,
+"good": false
+},
+{
+"index": 204,
+"wavelength_nm": 1892.865234375,
+"good": false
+},
+{
+"index": 205,
+"wavelength_nm": 1900.291259765625,
+"good": false
+},
+{
+"index": 206,
+"wavelength_nm": 1907.71630859375,
+"good": false
+},
+{
+"index": 207,
+"wavelength_nm": 1915.1414794921875,
+"good": false
+},
+{
+"index": 208,
+"wavelength_nm": 1922.5655517578125,
+"good": false
+},
+{
+"index": 209,
+"wavelength_nm": 1929.98974609375,
+"good": false
+},
+{
+"index": 210,
+"wavelength_nm": 1937.4129638671875,
+"good": false
+},
+{
+"index": 211,
+"wavelength_nm": 1944.836181640625,
+"good": false
+},
+{
+"index": 212,
+"wavelength_nm": 1952.2593994140625,
+"good": false
+},
+{
+"index": 213,
+"wavelength_nm": 1959.6817626953125,
+"good": false
+},
+{
+"index": 214,
+"wavelength_nm": 1967.10400390625,
+"good": false
+},
+{
+"index": 215,
+"wavelength_nm": 1974.525390625,
+"good": true
+},
+{
+"index": 216,
+"wavelength_nm": 1981.9468994140625,
+"good": true
+},
+{
+"index": 217,
+"wavelength_nm": 1989.3673095703125,
+"good": true
+},
+{
+"index": 218,
+"wavelength_nm": 1996.7877197265625,
+"good": true
+},
+{
+"index": 219,
+"wavelength_nm": 2004.207275390625,
+"good": true
+},
+{
+"index": 220,
+"wavelength_nm": 2011.6268310546875,
+"good": true
+},
+{
+"index": 221,
+"wavelength_nm": 2019.04541015625,
+"good": true
+},
+{
+"index": 222,
+"wavelength_nm": 2026.464111328125,
+"good": true
+},
+{
+"index": 223,
+"wavelength_nm": 2033.8826904296875,
+"good": true
+},
+{
+"index": 224,
+"wavelength_nm": 2041.2994384765625,
+"good": true
+},
+{
+"index": 225,
+"wavelength_nm": 2048.71728515625,
+"good": true
+},
+{
+"index": 226,
+"wavelength_nm": 2056.133056640625,
+"good": true
+},
+{
+"index": 227,
+"wavelength_nm": 2063.548828125,
+"good": true
+},
+{
+"index": 228,
+"wavelength_nm": 2070.964599609375,
+"good": true
+},
+{
+"index": 229,
+"wavelength_nm": 2078.37939453125,
+"good": true
+},
+{
+"index": 230,
+"wavelength_nm": 2085.79443359375,
+"good": true
+},
+{
+"index": 231,
+"wavelength_nm": 2093.20849609375,
+"good": true
+},
+{
+"index": 232,
+"wavelength_nm": 2100.621337890625,
+"good": true
+},
+{
+"index": 233,
+"wavelength_nm": 2108.034423828125,
+"good": true
+},
+{
+"index": 234,
+"wavelength_nm": 2115.446533203125,
+"good": true
+},
+{
+"index": 235,
+"wavelength_nm": 2122.858642578125,
+"good": true
+},
+{
+"index": 236,
+"wavelength_nm": 2130.269775390625,
+"good": true
+},
+{
+"index": 237,
+"wavelength_nm": 2137.68115234375,
+"good": true
+},
+{
+"index": 238,
+"wavelength_nm": 2145.09130859375,
+"good": true
+},
+{
+"index": 239,
+"wavelength_nm": 2152.50048828125,
+"good": true
+},
+{
+"index": 240,
+"wavelength_nm": 2159.909912109375,
+"good": true
+},
+{
+"index": 241,
+"wavelength_nm": 2167.3193359375,
+"good": true
+},
+{
+"index": 242,
+"wavelength_nm": 2174.727783203125,
+"good": true
+},
+{
+"index": 243,
+"wavelength_nm": 2182.13525390625,
+"good": true
+},
+{
+"index": 244,
+"wavelength_nm": 2189.542724609375,
+"good": true
+},
+{
+"index": 245,
+"wavelength_nm": 2196.94921875,
+"good": true
+},
+{
+"index": 246,
+"wavelength_nm": 2204.355712890625,
+"good": true
+},
+{
+"index": 247,
+"wavelength_nm": 2211.76123046875,
+"good": true
+},
+{
+"index": 248,
+"wavelength_nm": 2219.1669921875,
+"good": true
+},
+{
+"index": 249,
+"wavelength_nm": 2226.57177734375,
+"good": true
+},
+{
+"index": 250,
+"wavelength_nm": 2233.975341796875,
+"good": true
+},
+{
+"index": 251,
+"wavelength_nm": 2241.379150390625,
+"good": true
+},
+{
+"index": 252,
+"wavelength_nm": 2248.781982421875,
+"good": true
+},
+{
+"index": 253,
+"wavelength_nm": 2256.18505859375,
+"good": true
+},
+{
+"index": 254,
+"wavelength_nm": 2263.5869140625,
+"good": true
+},
+{
+"index": 255,
+"wavelength_nm": 2270.98876953125,
+"good": true
+},
+{
+"index": 256,
+"wavelength_nm": 2278.389892578125,
+"good": true
+},
+{
+"index": 257,
+"wavelength_nm": 2285.791015625,
+"good": true
+},
+{
+"index": 258,
+"wavelength_nm": 2293.19091796875,
+"good": true
+},
+{
+"index": 259,
+"wavelength_nm": 2300.590087890625,
+"good": true
+},
+{
+"index": 260,
+"wavelength_nm": 2307.98828125,
+"good": true
+},
+{
+"index": 261,
+"wavelength_nm": 2315.386474609375,
+"good": true
+},
+{
+"index": 262,
+"wavelength_nm": 2322.784912109375,
+"good": true
+},
+{
+"index": 263,
+"wavelength_nm": 2330.18212890625,
+"good": true
+},
+{
+"index": 264,
+"wavelength_nm": 2337.57861328125,
+"good": true
+},
+{
+"index": 265,
+"wavelength_nm": 2344.973876953125,
+"good": true
+},
+{
+"index": 266,
+"wavelength_nm": 2352.369384765625,
+"good": true
+},
+{
+"index": 267,
+"wavelength_nm": 2359.764892578125,
+"good": true
+},
+{
+"index": 268,
+"wavelength_nm": 2367.159423828125,
+"good": true
+},
+{
+"index": 269,
+"wavelength_nm": 2374.552978515625,
+"good": true
+},
+{
+"index": 270,
+"wavelength_nm": 2381.94580078125,
+"good": true
+},
+{
+"index": 271,
+"wavelength_nm": 2389.33837890625,
+"good": true
+},
+{
+"index": 272,
+"wavelength_nm": 2396.730224609375,
+"good": true
+},
+{
+"index": 273,
+"wavelength_nm": 2404.121826171875,
+"good": true
+},
+{
+"index": 274,
+"wavelength_nm": 2411.5126953125,
+"good": true
+},
+{
+"index": 275,
+"wavelength_nm": 2418.903564453125,
+"good": true
+},
+{
+"index": 276,
+"wavelength_nm": 2426.29248046875,
+"good": true
+},
+{
+"index": 277,
+"wavelength_nm": 2433.6826171875,
+"good": true
+},
+{
+"index": 278,
+"wavelength_nm": 2441.070556640625,
+"good": true
+},
+{
+"index": 279,
+"wavelength_nm": 2448.458740234375,
+"good": true
+},
+{
+"index": 280,
+"wavelength_nm": 2455.8466796875,
+"good": true
+},
+{
+"index": 281,
+"wavelength_nm": 2463.23388671875,
+"good": true
+},
+{
+"index": 282,
+"wavelength_nm": 2470.6201171875,
+"good": true
+},
+{
+"index": 283,
+"wavelength_nm": 2478.00537109375,
+"good": true
+},
+{
+"index": 284,
+"wavelength_nm": 2485.390869140625,
+"good": true
+},
+{
+"index": 285,
+"wavelength_nm": 2492.776123046875,
+"good": true
+}
+]
+}

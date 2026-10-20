@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "hs_common"
+version = "1.0.0"
+description = "Shared plumbing for the pipeline's Python services: storage, Kafka, messages, status, logging, metrics, geo outputs"
+requires-python = ">=3.11"
+dependencies = [
+  "boto3>=1.34", "s3fs>=2024.6", "confluent-kafka>=2.4", "pydantic>=2.7",
+  "redis>=5.0", "prometheus-client>=0.20", "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+geo = ["rasterio>=1.3", "pillow>=10"]
+
+[tool.setuptools.packages.find]
+include = ["hs_common*"]

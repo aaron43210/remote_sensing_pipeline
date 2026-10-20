@@ -42,7 +42,7 @@ def open_cube(store):
     return cube, dict(z.attrs)
 
 
-def scene_stats(cube, wavelengths, apply_dark):
+def scene_stats(cube, wavelengths, apply_dark, good=None):
     """
     Everything that must be the SAME for every chunk, from every Nth pixel.
 
@@ -61,7 +61,7 @@ def scene_stats(cube, wavelengths, apply_dark):
     stats = {
         "scale": scale,
         "dark": radiometric.estimate_dark(sample) if apply_dark else None,
-        "mask": bad_bands.snr_reject(sample, bad_bands.build_mask(wavelengths)),
+        "mask": bad_bands.snr_reject(sample, bad_bands.build_mask(wavelengths, good)),
     }
     return stats, report
 

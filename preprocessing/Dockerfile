@@ -1,21 +1,17 @@
-# =============================================================
-# OWNER: ANANTAHANARAYANAN
-# =============================================================
-# Build context is ./preprocessing (see docker-compose.yml), so this image is
-# self-contained: no shared/ or common/ folder is needed.
-FROM python:3.11-slim
-
+# Build context: repository root (needs libs/). The science modules are this
+# folder's own; service.py / thermal_service.py wire them to the platform.
+FROM python:3.11-slim-bookworm
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 SERVICE_NAME=preprocessing
 WORKDIR /app
-
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Source only -- tests and docs stay out of the image.
-COPY *.py ./
-COPY thermal/ ./thermal/
-
-# Non-root user, as in the ingestion image.
-RUN useradd -m appuser && chown -R appuser /app
-USER appuser
-
-CMD ["python", "main.py"]
+COPY constraints.txt /tmp/constraints.txt
+COPY preprocessing/requirements.txt /tmp/requirements.txt
+COPY libs/hs_common /tmp/hs_common
+RUN apt-get update && apt-get install -y --no-install-recommends build-essential libexpat1 \
+    && pip install --prefer-binary -c /tmp/constraints.txt -r /tmp/requirements.txt "/tmp/hs_common[geo]" && rm -rf /tmp/hs_common \
+    && apt-get purge -y build-essential && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
+COPY preprocessing/*.py ./
+COPY preprocessing/thermal/ ./thermal/
+RUN useradd -m -u 10001 app && chown -R app /app
+USER app
+HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request;urllib.request.urlopen('http://localhost:9100/metrics',timeout=3)"
+CMD ["python", "service.py"]

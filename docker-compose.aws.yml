@@ -1,0 +1,27 @@
+# AWS override: S3 instead of MinIO, CloudWatch logs, credentials from the
+# EC2 instance role. Used as:
+#   docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d
+# with an .env rendered from SSM Parameter Store by scripts/deploy.sh.
+x-aws-logging: &aws-logging
+  logging:
+    driver: awslogs
+    options:
+      awslogs-region: ${S3_REGION:-us-west-2}
+      awslogs-group: /hydranet/${ENV:-prod}
+      awslogs-create-group: "true"
+      tag: "{{.Name}}"
+
+services:
+  api_gateway: {<<: *aws-logging, image: "${REGISTRY}/hydranet/api_gateway:${TAG}"}
+  orchestrator: {<<: *aws-logging, image: "${REGISTRY}/hydranet/orchestrator:${TAG}"}
+  ingestion: {<<: *aws-logging, image: "${REGISTRY}/hydranet/ingestion:${TAG}"}
+  preprocessing: {<<: *aws-logging, image: "${REGISTRY}/hydranet/preprocessing:${TAG}"}
+  preprocessing-thermal: {<<: *aws-logging, image: "${REGISTRY}/hydranet/preprocessing:${TAG}"}
+  ml_inference: {<<: *aws-logging, image: "${REGISTRY}/hydranet/ml_inference:${TAG}"}
+  event_sink: {<<: *aws-logging, image: "${REGISTRY}/hydranet/event_sink:${TAG}"}
+  frontend: {<<: *aws-logging, image: "${REGISTRY}/hydranet/frontend:${TAG}", ports: ["80:80"]}
+  tools: {image: "${REGISTRY}/hydranet/tools:${TAG}", volumes: []}
+  dagster: {<<: *aws-logging, image: "${REGISTRY}/hydranet/pipelines:${TAG}"}
+  kafka: {<<: *aws-logging}
+  postgres: {<<: *aws-logging}
+  redis: {<<: *aws-logging}

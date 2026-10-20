@@ -1,0 +1,162 @@
+{
+  "$defs": {
+    "Georef": {
+      "properties": {
+        "crs": {
+          "default": "EPSG:4326",
+          "title": "Crs",
+          "type": "string"
+        },
+        "transform": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Transform",
+          "type": "array"
+        },
+        "width": {
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "transform",
+        "width",
+        "height"
+      ],
+      "title": "Georef",
+      "type": "object"
+    }
+  },
+  "description": "preprocessed.hyperspectral: preprocessing -> ml_inference.",
+  "properties": {
+    "schema_version": {
+      "default": 1,
+      "title": "Schema Version",
+      "type": "integer"
+    },
+    "event_id": {
+      "title": "Event Id",
+      "type": "string"
+    },
+    "job_id": {
+      "title": "Job Id",
+      "type": "string"
+    },
+    "ts": {
+      "title": "Ts",
+      "type": "string"
+    },
+    "satellite": {
+      "default": "EMIT",
+      "title": "Satellite",
+      "type": "string"
+    },
+    "granule_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Granule Id"
+    },
+    "acquired_at": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Acquired At"
+    },
+    "reflectance_key": {
+      "title": "Reflectance Key",
+      "type": "string"
+    },
+    "multiband_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Multiband Key"
+    },
+    "wavelengths": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Wavelengths",
+      "type": "array"
+    },
+    "cloud_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Cloud Key"
+    },
+    "georef": {
+      "$ref": "#/$defs/Georef"
+    },
+    "bbox": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Bbox",
+      "type": "array"
+    },
+    "tasks": {
+      "items": {
+        "enum": [
+          "agriculture",
+          "mineral",
+          "thermal"
+        ],
+        "type": "string"
+      },
+      "title": "Tasks",
+      "type": "array"
+    },
+    "quality": {
+      "additionalProperties": true,
+      "default": {},
+      "title": "Quality",
+      "type": "object"
+    },
+    "source": {
+      "default": "nasa",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "job_id",
+    "reflectance_key",
+    "wavelengths",
+    "georef",
+    "bbox",
+    "tasks"
+  ],
+  "title": "PreprocessedHyperspectral",
+  "type": "object"
+}
