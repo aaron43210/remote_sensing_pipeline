@@ -20,7 +20,6 @@ export function AuthProvider({ children }) {
     async login(email, password) { setSession(await api.login(email, password)) },
     async register(email, password, name) { setSession(await api.register(email, password, name)) },
     async logout() { await api.logout().catch(() => {}); setSession(null) },
-    async logoutAll() { await api.logoutAll().catch(() => {}); setSession(null) },
   }), [session, ready])
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

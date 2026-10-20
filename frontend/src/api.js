@@ -76,7 +76,6 @@ export const api = {
   login: (email, password) => request('POST', '/auth/login', { body: { email, password }, auth: false }),
   register: (email, password, name) => request('POST', '/auth/register', { body: { email, password, name }, auth: false }),
   logout: () => raw('POST', '/auth/logout', { headers: { ...CSRF, ...(session ? { Authorization: `Bearer ${session.token}` } : {}) } }),
-  logoutAll: () => request('POST', '/auth/logout-all'),
   streamTicket: (id) => request('POST', `/jobs/${encodeURIComponent(id)}/stream-ticket`),
   me: () => request('GET', '/me'),
   createJob: (payload, idempotencyKey) =>

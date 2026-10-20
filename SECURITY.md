@@ -17,7 +17,7 @@ which runs in CI against the full stack.
 | Stolen refresh token | Opaque random 256-bit token, only its SHA-256 is stored; `HttpOnly`, `Secure` (HTTPS), `SameSite=Strict`, `Path=/api/auth` cookie; **rotated on every use**; replaying an old one revokes the whole session family | rotation + theft-detection tests |
 | CSRF on cookie endpoints | `SameSite=Strict` + required `X-Requested-With: hydranet` header + `Origin` allow-list | CSRF tests |
 | Token leaks via URLs/logs | Tokens are never accepted in query strings; the live-status stream uses a **single-use, 30-second ticket** bound to one user and one job | ticket tests |
-| Account takeover persistence | "Sign out everywhere" bumps `users.token_version` (kills all access tokens) and revokes all refresh families | logout-all test |
+| Account takeover persistence | `POST /api/auth/logout-all` (ops/API) bumps `users.token_version` (kills all access tokens) and revokes all refresh families | logout-all test |
 | Reading other users' data (IDOR) | Every `/jobs/:id*` route checks ownership and answers 404 (no existence leak); admin-only `/stats` | IDOR tests |
 | Injection | Parameterised SQL everywhere (pgx), strict request validation (bbox numbers, task enum, dates), JSON only | SQL-string tests |
 | XSS / clickjacking / sniffing | React escaping; strict CSP (`script-src 'self'`, no inline/eval, explicit image/connect origins, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`, COOP, Permissions-Policy, HSTS | header tests + browser test with CSP on |
@@ -39,7 +39,7 @@ with time, user, IP and user agent.
 
 **Respond to a compromised account:** `UPDATE users SET token_version = token_version + 1 WHERE email = '…'`,
 revoke its refresh tokens (`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = …`), then
-`SET token_version:<id> <new>` in Redis. Or the user clicks "Sign out everywhere".
+`SET token_version:<id> <new>` in Redis. Or call `POST /api/auth/logout-all` with that user's token.
 
 **Watch for attacks:**
 ```sql
