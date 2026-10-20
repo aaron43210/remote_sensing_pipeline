@@ -23,6 +23,15 @@ type IngestRequest struct {
 	DateFrom      string    `json:"date_from,omitempty"`
 	DateTo        string    `json:"date_to,omitempty"`
 	Source        string    `json:"source"`
+	// clearest-first scenes from catalog_granules, used when NASA's search (CMR) is down
+	EmitCandidates []EmitCandidate `json:"emit_candidates,omitempty"`
+}
+
+type EmitCandidate struct {
+	GranuleID  string   `json:"granule_id"`
+	URL        string   `json:"url,omitempty"`
+	AcquiredAt string   `json:"acquired_at"`
+	CloudCover *float64 `json:"cloud_cover"`
 }
 
 type JobStatus struct {

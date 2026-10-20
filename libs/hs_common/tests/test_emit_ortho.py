@@ -18,7 +18,7 @@ def make_granule(path, rows=40, cols=30, bands=5):
     refl[0, 0, :] = -9999.0
     sbp = ds.createGroup("sensor_band_parameters")
     sbp.createVariable("wavelengths", "f4", ("bands",))[:] = np.linspace(400, 2400, bands)
-    sbp.createVariable("good_wavelengths", "u1", ("bands",))[:] = [1, 1, 0, 1, 1]
+    sbp.createVariable("good_wavelengths", "u1", ("bands",))[:] = ([1, 1, 0] + [1] * bands)[:bands]
     loc = ds.createGroup("location")
     gx = loc.createVariable("glt_x", "i4", ("ortho_y", "ortho_x"))
     gy = loc.createVariable("glt_y", "i4", ("ortho_y", "ortho_x"))
@@ -58,3 +58,53 @@ def test_bbox_outside_granule_raises(tmp_path):
     make_granule(p)
     with pytest.raises(ValueError):
         emit.ortho_crop(p, [-100.0, 10.0, -99.9, 10.1])
+
+
+V003 = ["Cloud Flag", "Cirrus Flag", "Water Flag", "Dilated Cloud Flag", "SpecTf-Cloud Probability",
+        "SpecTf-Cloud Flag", "SpecTf-Buffer Distance"]
+
+
+def test_cloud_mask_v003_uses_flags_by_name():
+    # a clear scene: every flag 0, but the SpecTf probability and buffer distance are > 0
+    # everywhere (as on EMIT_L2A_MASK_003_20230822T192555). Must NOT read as cloud.
+    m = np.zeros((4, 5, 7), np.float32)
+    m[..., 4] = 0.02
+    m[..., 6] = 6.3
+    assert not emit.cloud_from_mask(m, V003).any()
+    m[1, 2, 5] = 1.0                                     # SpecTf cloud flag
+    m[3, 0, 3] = 1.0                                     # dilated cloud flag
+    m[0, 4, 2] = 1.0                                     # water is not cloud
+    got = emit.cloud_from_mask(m, V003)
+    assert got[1, 2] and got[3, 0] and not got[0, 4] and got.sum() == 2
+
+
+def test_cloud_mask_legacy_layout_without_names():
+    m = np.zeros((2, 2, 7), np.float32)
+    m[..., 5] = 0.3                                      # AOD, continuous
+    m[0, 0, 4] = 1.0                                     # v001/002 dilated cloud
+    got = emit.cloud_from_mask(m)
+    assert got[0, 0] and got.sum() == 1
+
+
+def test_mask_band_names_are_read(tmp_path):
+    p = tmp_path / "m.nc"
+    make_granule(p, bands=7)
+    with netCDF4.Dataset(p, "a") as ds:
+        ds.createVariable("mask", "f4", ("downtrack", "crosstrack", "bands"))[:] = 0.0
+        v = ds["sensor_band_parameters"].createVariable("mask_bands", str, ("bands",))
+        for i, n in enumerate(V003):
+            v[i] = n
+    cube, names, _, _ = emit.ortho_crop(p, [-119.995, 36.975, -119.985, 36.990], var="mask")
+    assert list(names) == V003 and cube.shape[2] == 7
+
+
+def test_cmr_outage_is_told_apart_from_bad_requests():
+    import requests
+
+    def http(code):
+        r = requests.Response(); r.status_code = code
+        return requests.HTTPError(response=r)
+    assert emit.cmr_unavailable(requests.ReadTimeout())
+    assert emit.cmr_unavailable(requests.ConnectionError())
+    assert emit.cmr_unavailable(http(504)) and emit.cmr_unavailable(http(500))
+    assert not emit.cmr_unavailable(http(400)) and not emit.cmr_unavailable(ValueError())

@@ -61,6 +61,7 @@ func (s *Server) Routes() *gin.Engine {
 	priv.DELETE("/jobs/:id", s.CancelJob)
 	priv.GET("/jobs/:id/layers", s.Layers)
 	priv.GET("/catalog", s.Catalog)
+	priv.GET("/coverage", s.Coverage)
 	priv.GET("/stats", middleware.RequireAdmin(), s.Stats)
 
 	r.NoRoute(func(c *gin.Context) { c.JSON(http.StatusNotFound, gin.H{"error": "not found"}) })
@@ -76,6 +77,7 @@ func (s *Server) Config(c *gin.Context) {
 		"allowed_region": s.Cfg.AllowedRegion, "max_bbox_deg": s.Cfg.MaxBBoxDeg,
 		"allow_fixtures": s.Cfg.AllowFixtures, "tasks": []string{"agriculture", "mineral", "thermal"},
 		"max_active_jobs_per_user": s.Cfg.MaxActiveJobsPerUser, "env": s.Cfg.Env,
+		"emit_max_cloud": s.Cfg.EmitMaxCloud,
 	})
 }
 

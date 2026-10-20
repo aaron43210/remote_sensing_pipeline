@@ -147,8 +147,23 @@ def classical_thermal(lst):
 
 # ── Agreement ────────────────────────────────────────────────────────────────
 
+def value_range(layer):
+    """Physical range of a continuous layer, for range-normalised error (nMAE); None if open-ended."""
+    if layer.startswith("agri_") and not layer.endswith("_std"):
+        lo, hi = spec.AGRI_RANGES[layer[5:]]
+        return hi - lo
+    if layer in ("mineral_abundance", "mineral_quality"):
+        return 1.0
+    return None
+
+
 def agreement(nn, ref):
-    """Per-layer agreement between two map dicts (only where both are mapped)."""
+    """
+    Per-layer agreement between two map dicts (only where both are mapped).
+    Continuous layers report MAE, nMAE (MAE / physical range: the judged metric,
+    stable when an area's values barely vary) and R² (informative only: it
+    collapses towards -inf when the reference has almost no variance).
+    """
     out = {}
     for k, a in nn.items():
         b = ref.get(k)
@@ -170,4 +185,7 @@ def agreement(nn, ref):
                 out[k] = {"mae": float(np.abs(d).mean()),
                           "r2": float(1 - (d ** 2).sum() / ss) if ss > 0 else None,
                           "n": int(m.sum())}
+                rng = value_range(k)
+                if rng:
+                    out[k]["nmae"] = out[k]["mae"] / rng
     return out

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { BrowserRouter, Navigate, NavLink, Route, Routes, useLocation } from 'react-router'
 import { Activity, History as HistoryIcon, LogOut, Map } from 'lucide-react'
+import logo from './assets/icon.png'
 import { AuthProvider, useAuth } from './auth'
 import AuthPage from './pages/AuthPage'
 import History from './pages/History'
@@ -23,7 +24,7 @@ function Shell({ children }) {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand"><span className="brand-dot" /> HydraNet Maps</div>
+        <div className="brand"><img src={logo} alt="HydraNet Logo" className="brand-logo" /> HydraNet Maps</div>
         <nav className="nav">
           <NavLink to="/" end><Map size={14} /> <span>Map</span></NavLink>
           <NavLink to="/jobs"><HistoryIcon size={14} /> <span>Jobs</span></NavLink>

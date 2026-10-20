@@ -68,8 +68,44 @@ def write_raw_zarr(job_id, cube, wavelengths, good, georef, meta):
     return key
 
 
+CMR_DOWN = "NASA's EMIT search service (CMR) is not responding; please try again later"
+
+
+def _search(req):
+    """NASA CMR first; while CMR is down, the catalogued scenes the gateway attached."""
+    try:
+        return emit.search(req["bbox"], req.get("date_from"), req.get("date_to"))
+    except Exception as e:
+        if not emit.cmr_unavailable(e):
+            raise
+        candidates = [dict(c) for c in req.get("emit_candidates") or [] if c.get("url")]
+        if not candidates:
+            raise RuntimeError(CMR_DOWN) from e     # transient: the worker retries, then reports this
+        log.warning("CMR unavailable (%s); using %d catalogued EMIT scene(s)", type(e).__name__, len(candidates))
+        return candidates
+
+
+def _staged_mask(granule_id):
+    """Key of a MASK granule already staged in Bronze for this acquisition, if any."""
+    prefix = keys.emit_granule(granule_id + "_MASK", "")
+    found = storage.client().list_objects_v2(Bucket=storage.bucket(), Prefix=prefix, MaxKeys=1).get("Contents", [])
+    return found[0]["Key"] if found else None
+
+
+def _mask_url(g):
+    try:
+        return emit.mask_granule_for(g)
+    except Exception as e:
+        if not emit.cmr_unavailable(e):
+            raise
+        key = _staged_mask(g["granule_id"])
+        if key is None:                              # never map without the cloud mask
+            raise RuntimeError(CMR_DOWN) from e
+        return key.rsplit("/", 1)[-1]                # _staged_granule resolves the staged copy by name
+
+
 def fetch_nasa(req, workdir):
-    granules = emit.search(req["bbox"], req.get("date_from"), req.get("date_to"))
+    granules = _search(req)
     if not granules:
         raise NoData("no EMIT acquisition fully covers this area in the date range")
     g = granules[0]
@@ -79,16 +115,18 @@ def fetch_nasa(req, workdir):
     cube, wl, good, georef = emit.ortho_crop(nc, req["bbox"])
     os.remove(nc)
     cloud = None
-    mask_url = emit.mask_granule_for(g)
+    mask_url = _mask_url(g)
     if mask_url:
         mnc = _staged_granule(mask_url, g["granule_id"] + "_MASK", workdir)
-        mcube, _, _, mgeo = emit.ortho_crop(mnc, req["bbox"], var="mask")
+        mcube, mnames, _, mgeo = emit.ortho_crop(mnc, req["bbox"], var="mask")
         if mcube.shape[:2] == cube.shape[:2]:
-            cloud = emit.cloud_from_mask(mcube)
+            cloud = emit.cloud_from_mask(mcube, mnames)
         os.remove(mnc)
     valid = np.isfinite(cube).all(axis=-1)
     if valid.mean() < 0.05:
         raise NoData("the selected EMIT scene has no valid pixels in this area")
+    if cloud is not None and (cloud & valid).sum() > 0.95 * valid.sum():
+        raise NoData("clouds cover this area in the selected EMIT scene")
     return cube, wl, good, georef, cloud, {"granule_id": g["granule_id"], "acquired_at": g["acquired_at"],
                                            "cloud_cover": g["cloud_cover"]}
 

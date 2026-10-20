@@ -1,4 +1,49 @@
 {
+  "$defs": {
+    "EmitCandidate": {
+      "description": "An EMIT acquisition from the platform catalog that fully covers the job's box.",
+      "properties": {
+        "granule_id": {
+          "title": "Granule Id",
+          "type": "string"
+        },
+        "url": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Url"
+        },
+        "acquired_at": {
+          "title": "Acquired At",
+          "type": "string"
+        },
+        "cloud_cover": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Cloud Cover"
+        }
+      },
+      "required": [
+        "granule_id",
+        "acquired_at"
+      ],
+      "title": "EmitCandidate",
+      "type": "object"
+    }
+  },
   "description": "ingest.requests: gateway -> ingestion.",
   "properties": {
     "schema_version": {
@@ -81,6 +126,14 @@
       ],
       "title": "Source",
       "type": "string"
+    },
+    "emit_candidates": {
+      "default": [],
+      "items": {
+        "$ref": "#/$defs/EmitCandidate"
+      },
+      "title": "Emit Candidates",
+      "type": "array"
     }
   },
   "required": [

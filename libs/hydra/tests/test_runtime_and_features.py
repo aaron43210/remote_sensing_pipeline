@@ -45,3 +45,15 @@ def test_runtime_shapes_and_ranges():
     m = rt.predict("mineral", rng.uniform(0, 1, (20, spec.N_MINERAL_FEATURES)))
     np.testing.assert_allclose(m["mineral_abundance"].sum(1), 1.0, atol=1e-5)
     np.testing.assert_allclose(m["mineral_class_probs"].sum(1), 1.0, atol=1e-5)
+
+
+def test_agreement_uses_range_normalised_error_on_uniform_areas():
+    # a near-uniform field: the reference barely varies, the network is off by ~0.5 ug/cm2
+    from hydra import maps
+    rng = np.random.default_rng(0)
+    ref = 40.0 + rng.normal(0, 0.05, (30, 30)).astype(np.float32)
+    nn = ref + rng.normal(0, 0.5, ref.shape).astype(np.float32)
+    a = maps.agreement({"agri_Cab": nn}, {"agri_Cab": ref})["agri_Cab"]
+    assert a["r2"] < 0                       # R² collapses although the error is tiny ...
+    assert a["nmae"] < 0.01                  # ... nMAE (MAE / 110 ug/cm2 range) stays honest
+    assert maps.value_range("agri_Cw") == pytest.approx(0.07) and maps.value_range("thermal_lst") is None

@@ -58,6 +58,12 @@ promotes the trained model in `training/artifacts/models/v1` (train it first:
 `training/README.md`). Add `--profile obs` for Prometheus (127.0.0.1:9090) and
 Grafana (127.0.0.1:3002), `--profile batch` for Dagster (localhost:3001).
 
+**EMIT coverage on the map:** the init indexes every EMIT scene over the region
+(NASA CMR, public) into PostGIS, Dagster refreshes it daily, and the map dims
+everything without a usable scene for the chosen dates. Refresh by hand with
+`docker compose run --rm tools python scripts/refresh_catalog.py`. The same
+catalog lets jobs keep working while NASA's search service (CMR) is down.
+
 Scale workers (up to each topic's partitions):
 `docker compose --profile local up -d --scale ml_inference=4 --scale preprocessing=4 --scale ingestion=4`
 

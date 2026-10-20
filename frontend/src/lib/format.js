@@ -45,3 +45,6 @@ export function bboxAreaKm2(b) {
   const lat = ((b[1] + b[3]) / 2) * (Math.PI / 180)
   return (b[2] - b[0]) * 111.32 * Math.cos(lat) * (b[3] - b[1]) * 110.57
 }
+
+export const todayIso = () => new Date().toISOString().slice(0, 10)
+export const yearAgoIso = () => new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10)

@@ -1,11 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Crosshair, Play } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { AlertTriangle, CheckCircle2, Crosshair, Play } from 'lucide-react'
 import { api, ApiError, newIdempotencyKey } from '../api'
-import { bboxAreaKm2, dateOnly } from '../lib/format'
+import { scenesCovering } from '../lib/coverage'
+import { bboxAreaKm2, todayIso } from '../lib/format'
 import { TASKS } from '../lib/layers'
-
-const today = () => new Date().toISOString().slice(0, 10)
-const yearAgo = () => new Date(Date.now() - 365 * 864e5).toISOString().slice(0, 10)
 
 function validBox(b, region, maxDeg) {
   if (!b || b.some((v) => !Number.isFinite(v))) return 'Enter four numbers'
@@ -16,23 +14,15 @@ function validBox(b, region, maxDeg) {
   return null
 }
 
-export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, onSubmitted }) {
+export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, onSubmitted, dates, setDates, coverage }) {
   const [tasks, setTasks] = useState(['agriculture', 'mineral', 'thermal'])
-  const [dateFrom, setDateFrom] = useState(yearAgo())
-  const [dateTo, setDateTo] = useState(today())
+  const [dateFrom, dateTo] = dates
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(null)
-  const [catalog, setCatalog] = useState(null)
   const [edit, setEdit] = useState(null)
   const idemKey = useMemo(newIdempotencyKey, [bbox, tasks, dateFrom, dateTo])
-
-  useEffect(() => {
-    setCatalog(null)
-    if (!bbox) return undefined
-    let live = true
-    api.catalog(bbox).then((c) => live && setCatalog(c.granules)).catch(() => live && setCatalog([]))
-    return () => { live = false }
-  }, [bbox])
+  const needsEmit = tasks.includes('agriculture') || tasks.includes('mineral')
+  const scenes = useMemo(() => scenesCovering(coverage, bbox), [coverage, bbox])
 
   const boxError = bbox ? validBox(bbox, config.allowed_region, config.max_bbox_deg) : null
   const toggle = (t) => setTasks((cur) => (cur.includes(t) ? cur.filter((x) => x !== t) : [...cur, t]))
@@ -106,18 +96,24 @@ export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, on
       <div>
         <h2>3. Imagery dates</h2>
         <div className="grid2">
-          <label className="field">From<input type="date" value={dateFrom} max={dateTo} onChange={(e) => setDateFrom(e.target.value)} /></label>
-          <label className="field">To<input type="date" value={dateTo} min={dateFrom} max={today()} onChange={(e) => setDateTo(e.target.value)} /></label>
+          <label className="field">From<input type="date" value={dateFrom} max={dateTo} onChange={(e) => e.target.value && setDates([e.target.value, dateTo])} /></label>
+          <label className="field">To<input type="date" value={dateTo} min={dateFrom} max={todayIso()} onChange={(e) => e.target.value && setDates([dateFrom, e.target.value])} /></label>
         </div>
         <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>
           The clearest scene in this window is used: EMIT for agriculture and minerals, Landsat 8/9 for thermal.
         </p>
-        {catalog && catalog.length > 0 && (
-          <p className="secondary" style={{ fontSize: 12 }}>
-            Already indexed here: {catalog.slice(0, 3).map((g) => `${g.sensor} ${dateOnly(g.acquired_at)}`).join(' · ')}
-            {catalog.length > 3 ? ` +${catalog.length - 3} more` : ''}
-          </p>
-        )}
+        {bbox && !boxError && needsEmit && coverage && (scenes.length > 0 ? (
+          <div className="notice good" role="status"><CheckCircle2 size={14} /><span>
+            {`${scenes.length} EMIT scene${scenes.length > 1 ? 's' : ''} cover this area in these dates. `}
+            {`Will use ${scenes[0].acquired_at} (${Math.round(scenes[0].cloud_pct ?? 0)} % cloud)`}
+            {scenes[0].staged ? ', already downloaded: maps in seconds.' : ', first use downloads it from NASA (about 10 min).'}
+          </span></div>
+        ) : (
+          <div className="notice warning" role="status"><AlertTriangle size={14} /><span>
+            No EMIT scene covers this whole area in these dates, so agriculture and minerals would have no data.
+            Move it inside the bright, white-outlined area (one scene must cover the whole box) or widen the dates. Thermal (Landsat) works everywhere.
+          </span></div>
+        ))}
       </div>
 
       {error && <div className="notice error" role="alert">{error}</div>}

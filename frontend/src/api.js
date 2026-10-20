@@ -84,7 +84,7 @@ export const api = {
   job: (id) => request('GET', `/jobs/${encodeURIComponent(id)}`),
   cancelJob: (id) => request('DELETE', `/jobs/${encodeURIComponent(id)}`),
   layers: (id) => request('GET', `/jobs/${encodeURIComponent(id)}/layers`),
-  catalog: (bbox) => request('GET', `/catalog?bbox=${bbox.join(',')}`),
+  coverage: (dateFrom, dateTo) => request('GET', `/coverage?date_from=${dateFrom}&date_to=${dateTo}`),
   stats: () => request('GET', '/stats'),
 }
 
