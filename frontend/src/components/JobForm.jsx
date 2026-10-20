@@ -121,15 +121,6 @@ export default function JobForm({ config, bbox, setBbox, drawing, setDrawing, on
         )}
       </div>
 
-      {config.allow_fixtures && (
-        <label className="field">Imagery source
-          <select value={source} onChange={(e) => setSource(e.target.value)}>
-            <option value="nasa">NASA EMIT + Landsat (real imagery)</option>
-            <option value="fixture">Synthetic test scene (for demos and testing)</option>
-          </select>
-        </label>
-      )}
-
       {error && <div className="notice error" role="alert">{error}</div>}
       <button className="btn primary block" disabled={busy || !bbox || !!boxError || tasks.length === 0}>
         <Play size={14} /> {busy ? 'Submitting…' : 'Make maps'}

@@ -80,7 +80,6 @@ export default function Workspace() {
       <AreaMap region={config.allowed_region} maxDeg={config.max_bbox_deg} bbox={bbox} onBbox={setBbox}
                drawing={drawing} setDrawing={setDrawing} overlays={overlays} marker={point}
                onInspect={data ? (lat, lon) => setPoint([lat, lon]) : null}>
-        {job?.source === 'fixture' && <span className="badge warning fixture-banner">Synthetic test scene</span>}
         {data && !point && <div className="map-hint">Click the map to read every value at a point</div>}
         {data && <PixelInspector point={point} layers={data.layers} onClose={() => setPoint(null)} />}
       </AreaMap>

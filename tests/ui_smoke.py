@@ -61,7 +61,6 @@ with sync_playwright() as p:
     for label, v in (("West (lon)", "-119.8400"), ("South (lat)", "36.7100"), ("East (lon)", "-119.7900"), ("North (lat)", "36.7600")):
         page.get_by_label(label).fill(v)
     page.get_by_role("button", name="Apply").click()
-    page.get_by_label("Imagery source").select_option("fixture")
     page.get_by_role("button", name="Make maps").click()
     page.wait_for_url("**/jobs/**", timeout=15000)
     ok(True, "job submitted, job page open")
