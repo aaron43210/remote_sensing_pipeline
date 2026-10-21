@@ -1,5 +1,5 @@
 # Build context: repository root (go.mod lives there). Multi-arch: amd64 + arm64.
-FROM --platform=$BUILDPLATFORM golang:1.26.9-alpine AS build
+FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 ARG TARGETOS TARGETARCH
 WORKDIR /src
 COPY go.mod go.sum ./
