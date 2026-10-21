@@ -82,7 +82,6 @@
       "type": "array"
     },
     "stats": {
-      "additionalProperties": true,
       "default": {},
       "title": "Stats",
       "type": "object"

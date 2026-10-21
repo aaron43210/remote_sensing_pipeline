@@ -138,7 +138,6 @@
       "type": "array"
     },
     "quality": {
-      "additionalProperties": true,
       "default": {},
       "title": "Quality",
       "type": "object"

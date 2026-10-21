@@ -88,7 +88,6 @@
           "title": "Classes"
         },
         "stats": {
-          "additionalProperties": true,
           "default": {},
           "title": "Stats",
           "type": "object"
@@ -143,19 +142,16 @@
       "type": "array"
     },
     "summary": {
-      "additionalProperties": true,
       "default": {},
       "title": "Summary",
       "type": "object"
     },
     "verification": {
-      "additionalProperties": true,
       "default": {},
       "title": "Verification",
       "type": "object"
     },
     "timings": {
-      "additionalProperties": true,
       "default": {},
       "title": "Timings",
       "type": "object"
