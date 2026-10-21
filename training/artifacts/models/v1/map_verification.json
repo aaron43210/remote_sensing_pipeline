@@ -1,215 +1,222 @@
 {
   "model_version": "v1",
-  "feature_spec_hash": "f15dd48ca7cd4dd6",
+  "feature_spec_hash": "be8eb2b9cf99ce42",
   "gates": {
     "mineral_class": {
       "metric": "pixel_agreement",
-      "value": 0.99957,
+      "value": 1.0,
       "threshold": 0.98,
       "passed": true
     },
     "mineral_abundance": {
       "metric": "mae",
-      "value": 0.0057,
+      "value": 0.00194,
       "threshold": 0.03,
       "passed": true
     },
     "mineral_quality": {
       "metric": "mae",
-      "value": 0.00745,
+      "value": 0.00404,
       "threshold": 0.03,
       "passed": true
     },
     "agri_Cab": {
       "metric": "nmae",
-      "value": 0.01624,
+      "value": 0.0171,
       "threshold": 0.05,
       "passed": true,
-      "r2_within_scene": 0.96
+      "r2_within_scene": 0.9314
     },
     "agri_Cw": {
       "metric": "nmae",
-      "value": 0.01444,
+      "value": 0.01492,
       "threshold": 0.05,
       "passed": true,
-      "r2_within_scene": 0.9827
+      "r2_within_scene": 0.9772
     },
     "agri_LAI": {
       "metric": "nmae",
-      "value": 0.03447,
+      "value": 0.03425,
       "threshold": 0.05,
       "passed": true,
-      "r2_within_scene": 0.7376
+      "r2_within_scene": 0.7371
     },
     "thermal_global_class": {
       "metric": "pixel_agreement",
-      "value": 0.99879,
+      "value": 0.99965,
       "threshold": 0.99,
       "passed": true
     },
     "thermal_uhi_class": {
       "metric": "pixel_agreement",
-      "value": 0.99855,
+      "value": 0.9984,
       "threshold": 0.99,
       "passed": true
     },
     "thermal_local_anomaly": {
       "metric": "pixel_agreement",
-      "value": 0.99969,
+      "value": 0.99978,
       "threshold": 0.99,
       "passed": true
     },
     "thermal_hotspots": {
       "metric": "pixel_agreement",
-      "value": 0.99832,
+      "value": 0.99775,
       "threshold": 0.99,
       "passed": true
+    },
+    "thermal_real_scene_min": {
+      "metric": "pixel_agreement",
+      "value": 0.98808,
+      "threshold": 0.98,
+      "passed": true,
+      "worst": "tulare_farms/thermal_hotspots"
     }
   },
   "all_passed": true,
   "aggregate": {
-    "mineral_quality": {
-      "n": 4667,
-      "scenes": 8,
-      "mae": 0.007453253125831348,
-      "mae_worst_scene": 0.010894788429141045,
-      "r2": 0.9896953114738857,
-      "r2_worst_scene": 0.8990504741668701
-    },
-    "agri_Cw": {
-      "n": 40422,
-      "scenes": 8,
-      "mae": 0.0010104857673293804,
-      "mae_worst_scene": 0.0012314209016039968,
-      "r2": 0.982657733325006,
-      "r2_worst_scene": 0.9612274169921875,
-      "nmae": 0.014435510961848289
-    },
-    "mineral_abundance": {
-      "n": 56004,
-      "scenes": 8,
-      "mae": 0.005696609099033381,
-      "mae_worst_scene": 0.009265285916626453,
-      "r2": 0.9922428459075934,
-      "r2_worst_scene": 0.9849916696548462
-    },
     "mineral_class": {
       "n": 4667,
       "scenes": 8,
-      "pixel_agreement": 0.999571459181487,
-      "pixel_agreement_worst_scene": 0.9986928104575163
+      "pixel_agreement": 1.0,
+      "pixel_agreement_worst_scene": 1.0
     },
     "agri_Car": {
       "n": 40422,
       "scenes": 8,
-      "mae": 1.0961773888690014,
-      "mae_worst_scene": 1.248286247253418,
-      "r2": 0.842500617908916,
-      "r2_worst_scene": 0.6813549995422363,
-      "nmae": 0.03653924629563338
-    },
-    "agri_Cm": {
-      "n": 40422,
-      "scenes": 8,
-      "mae": 0.0009249409720635523,
-      "mae_worst_scene": 0.0012234762543812394,
-      "r2": 0.9683636144694968,
-      "r2_worst_scene": 0.8988415598869324,
-      "nmae": 0.018498819441271047
-    },
-    "agri_LAI": {
-      "n": 40422,
-      "scenes": 8,
-      "mae": 0.3447032839555282,
-      "mae_worst_scene": 0.37264955043792725,
-      "r2": 0.7376307570125057,
-      "r2_worst_scene": 0.49299150705337524,
-      "nmae": 0.03447032839555282
+      "mae": 1.11589951042395,
+      "mae_worst_scene": 1.2516175508499146,
+      "r2": 0.8204687885189156,
+      "r2_worst_scene": 0.6335910558700562,
+      "nmae": 0.037196650347465
     },
     "agri_Cab": {
       "n": 40422,
       "scenes": 8,
-      "mae": 1.7858781737101839,
-      "mae_worst_scene": 2.178851842880249,
-      "r2": 0.960047107328318,
-      "r2_worst_scene": 0.8571473956108093,
-      "nmae": 0.016235256124638036
+      "mae": 1.8813310866748483,
+      "mae_worst_scene": 2.3216712474823,
+      "r2": 0.9314034961945146,
+      "r2_worst_scene": 0.7317938804626465,
+      "nmae": 0.017103009878862256
+    },
+    "mineral_quality": {
+      "n": 4667,
+      "scenes": 8,
+      "mae": 0.004038846255137396,
+      "mae_worst_scene": 0.008129573427140713,
+      "r2": 0.9970201615707915,
+      "r2_worst_scene": 0.9890516996383667
     },
     "agri_ALA": {
       "n": 40422,
       "scenes": 8,
-      "mae": 1.7433880254059306,
-      "mae_worst_scene": 2.270822525024414,
-      "r2": 0.977409187880719,
-      "r2_worst_scene": 0.9418250322341919,
-      "nmae": 0.019370978060065897
+      "mae": 1.7241985536354205,
+      "mae_worst_scene": 2.1278488636016846,
+      "r2": 0.9781579233576605,
+      "r2_worst_scene": 0.9498188495635986,
+      "nmae": 0.01915776170706023
     },
-    "thermal_local_anomaly": {
-      "n": 553312,
-      "scenes": 6,
-      "pixel_agreement": 0.9996891446417211,
-      "pixel_agreement_worst_scene": 0.998548714806334
+    "agri_Cw": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.0010442718030248797,
+      "mae_worst_scene": 0.0013572031166404486,
+      "r2": 0.9772017688926045,
+      "r2_worst_scene": 0.9410151243209839,
+      "nmae": 0.014918168614641137
     },
-    "thermal_hotspots": {
-      "n": 553312,
-      "scenes": 6,
-      "pixel_agreement": 0.9983192123069805,
-      "pixel_agreement_worst_scene": 0.9916577977015942
+    "agri_Cm": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.000916076272642804,
+      "mae_worst_scene": 0.0012056682026013732,
+      "r2": 0.9691849485556544,
+      "r2_worst_scene": 0.9069059491157532,
+      "nmae": 0.018321525452856077
     },
-    "thermal_global_class": {
-      "n": 552123,
-      "scenes": 6,
-      "pixel_agreement": 0.9987883134736282,
-      "pixel_agreement_worst_scene": 0.9974004753416518
+    "mineral_abundance": {
+      "n": 56004,
+      "scenes": 8,
+      "mae": 0.0019375577417770227,
+      "mae_worst_scene": 0.004863934125751257,
+      "r2": 0.9989054243774569,
+      "r2_worst_scene": 0.99615877866745
+    },
+    "agri_LAI": {
+      "n": 40422,
+      "scenes": 8,
+      "mae": 0.3425249809948613,
+      "mae_worst_scene": 0.3792276382446289,
+      "r2": 0.7371313290008897,
+      "r2_worst_scene": 0.5063954591751099,
+      "nmae": 0.03425249809948613
     },
     "thermal_uhi_class": {
       "n": 552123,
       "scenes": 6,
-      "pixel_agreement": 0.9985546698833412,
-      "pixel_agreement_worst_scene": 0.9941303576611733
+      "pixel_agreement": 0.9984043410616837,
+      "pixel_agreement_worst_scene": 0.9935820943657884
+    },
+    "thermal_hotspots": {
+      "n": 553312,
+      "scenes": 6,
+      "pixel_agreement": 0.9977535278468568,
+      "pixel_agreement_worst_scene": 0.9880779608905516
+    },
+    "thermal_global_class": {
+      "n": 552123,
+      "scenes": 6,
+      "pixel_agreement": 0.9996450066380136,
+      "pixel_agreement_worst_scene": 0.9992678889737713
+    },
+    "thermal_local_anomaly": {
+      "n": 553312,
+      "scenes": 6,
+      "pixel_agreement": 0.9997849314672372,
+      "pixel_agreement_worst_scene": 0.9991184786231067
     }
   },
   "emit_synthetic": {
     "scenes": 8,
     "timing": [
       {
-        "nn_s": 0.015,
-        "classical_s": 0.059,
+        "nn_s": 0.02,
+        "classical_s": 0.064,
         "pixels": 9216
       },
       {
         "nn_s": 0.009,
-        "classical_s": 0.052,
+        "classical_s": 0.053,
         "pixels": 9216
       },
       {
         "nn_s": 0.008,
+        "classical_s": 0.057,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.007,
+        "classical_s": 0.052,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.065,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
+        "classical_s": 0.077,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.007,
+        "classical_s": 0.069,
+        "pixels": 9216
+      },
+      {
+        "nn_s": 0.009,
         "classical_s": 0.059,
-        "pixels": 9216
-      },
-      {
-        "nn_s": 0.007,
-        "classical_s": 0.05,
-        "pixels": 9216
-      },
-      {
-        "nn_s": 0.009,
-        "classical_s": 0.067,
-        "pixels": 9216
-      },
-      {
-        "nn_s": 0.009,
-        "classical_s": 0.071,
-        "pixels": 9216
-      },
-      {
-        "nn_s": 0.007,
-        "classical_s": 0.066,
-        "pixels": 9216
-      },
-      {
-        "nn_s": 0.009,
-        "classical_s": 0.058,
         "pixels": 9216
       }
     ]
@@ -227,13 +234,13 @@
         36.4,
         43.4
       ],
-      "uhi_intensity_nn_c": 5.71,
+      "uhi_intensity_nn_c": 5.7,
       "uhi_intensity_classical_c": 5.7,
       "agreement": {
-        "thermal_global_class": 0.9974004753416518,
-        "thermal_uhi_class": 0.9996180290297937,
-        "thermal_hotspots": 0.9996710805534335,
-        "thermal_local_anomaly": 0.9999681690858161
+        "thermal_global_class": 0.9992678889737713,
+        "thermal_uhi_class": 0.9996923011628894,
+        "thermal_hotspots": 0.9997665732959851,
+        "thermal_local_anomaly": 0.9999575587810882
       }
     },
     {
@@ -251,10 +258,10 @@
       "uhi_intensity_nn_c": 4.17,
       "uhi_intensity_classical_c": 4.17,
       "agreement": {
-        "thermal_global_class": 0.9986529301463457,
-        "thermal_uhi_class": 0.999353406470246,
-        "thermal_hotspots": 0.9993464052287582,
-        "thermal_local_anomaly": 0.9997857066323798
+        "thermal_global_class": 0.9995258314115136,
+        "thermal_uhi_class": 0.9989977800288812,
+        "thermal_hotspots": 0.9994535519125683,
+        "thermal_local_anomaly": 0.9998071359691417
       }
     },
     {
@@ -272,10 +279,10 @@
       "uhi_intensity_nn_c": 7.8,
       "uhi_intensity_classical_c": 7.81,
       "agreement": {
-        "thermal_global_class": 0.999292740950299,
-        "thermal_uhi_class": 0.9995606421054888,
-        "thermal_hotspots": 0.9996570865213571,
-        "thermal_local_anomaly": 0.9999249876765468
+        "thermal_global_class": 0.9997428148910178,
+        "thermal_uhi_class": 0.9995177779206584,
+        "thermal_hotspots": 0.9996999507061874,
+        "thermal_local_anomaly": 0.9999142716303393
       }
     },
     {
@@ -293,9 +300,9 @@
       "uhi_intensity_nn_c": 7.81,
       "uhi_intensity_classical_c": 7.82,
       "agreement": {
-        "thermal_global_class": 0.9993760068979601,
-        "thermal_uhi_class": 0.9992398629484242,
-        "thermal_hotspots": 0.9998648572554761,
+        "thermal_global_class": 0.999841165392208,
+        "thermal_uhi_class": 0.9992171722901682,
+        "thermal_hotspots": 0.9998423334647221,
         "thermal_local_anomaly": 0.999943690523115
       }
     },
@@ -311,13 +318,13 @@
         30.4,
         49.2
       ],
-      "uhi_intensity_nn_c": 17.01,
+      "uhi_intensity_nn_c": 17.02,
       "uhi_intensity_classical_c": 17.06,
       "agreement": {
-        "thermal_global_class": 0.9997849947861236,
-        "thermal_uhi_class": 0.9941303576611733,
-        "thermal_hotspots": 0.9916577977015942,
-        "thermal_local_anomaly": 0.998548714806334
+        "thermal_global_class": 0.9998709968716741,
+        "thermal_uhi_class": 0.9935820943657884,
+        "thermal_hotspots": 0.9880779608905516,
+        "thermal_local_anomaly": 0.9991184786231067
       }
     },
     {
@@ -335,9 +342,9 @@
       "uhi_intensity_nn_c": 6.73,
       "uhi_intensity_classical_c": 6.74,
       "agreement": {
-        "thermal_global_class": 0.9982560706401766,
+        "thermal_global_class": 0.9996357615894039,
         "thermal_uhi_class": 0.9994701986754967,
-        "thermal_hotspots": 0.9998013245033113,
+        "thermal_hotspots": 0.9997902869757175,
         "thermal_local_anomaly": 0.9999779249448124
       }
     }

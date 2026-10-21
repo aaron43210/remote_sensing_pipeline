@@ -169,7 +169,9 @@ def model_agreement_report(context: AssetExecutionContext) -> MaterializeResult:
         agg = {}
         for task, model, ver in cur.fetchall():
             for layer, m in (ver or {}).items():
-                v = m.get("pixel_agreement", m.get("r2"))
+                # same scale as the live metric: share of pixels for classes, 1 - nMAE for continuous
+                # maps (R² is unstable on uniform areas; only results from before nMAE fall back to it)
+                v = m.get("pixel_agreement", 1 - m["nmae"] if "nmae" in m else m.get("r2"))
                 if v is None:
                     continue
                 a = agg.setdefault((task, layer, model), [0.0, 0])

@@ -1,0 +1,6 @@
+{
+  "name": "hydranet-report",
+  "private": true,
+  "description": "Builds docs/HydraNet_Project_Document.docx",
+  "dependencies": { "docx": "9.5.1" }
+}

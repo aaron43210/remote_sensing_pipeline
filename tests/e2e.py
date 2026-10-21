@@ -89,9 +89,13 @@ def verify_job(base, token, job, label):
         ver = res.get("verification") or {}
         check(bool(ver), f"{label}: {task} shadow verification present")
         for layer, m in ver.items():
-            v = m.get("pixel_agreement", m.get("r2"))
-            if v is not None and layer in ("mineral_class", "thermal_global_class", "thermal_uhi_class", "agri_Cab", "agri_Cw"):
-                check(v >= 0.95, f"{label}: {task}/{layer} agrees with classical ({v:.4f})")
+            if layer in ("mineral_class", "thermal_global_class", "thermal_uhi_class"):
+                check(m["pixel_agreement"] >= 0.95, f"{label}: {task}/{layer} agrees with classical ({m['pixel_agreement']:.4f})")
+            elif layer in ("agri_Cab", "agri_Cw", "agri_LAI", "mineral_abundance"):
+                # the product's rule: error <= 5 % of the value's range (R² is reported, not judged:
+                # it collapses on areas whose values barely vary)
+                check(m["nmae"] <= 0.05, f"{label}: {task}/{layer} agrees with classical "
+                                         f"(error {m['nmae'] * 100:.2f} % of range, R² {m.get('r2')})")
     return data
 
 

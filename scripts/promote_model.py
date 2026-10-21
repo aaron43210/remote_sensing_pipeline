@@ -76,7 +76,8 @@ def main(argv=None):
         conn.execute("""INSERT INTO model_versions (version, card, map_verification, s3_key, feature_spec_hash, active, promoted_at)
                         VALUES (%s, %s, %s, %s, %s, true, now())
                         ON CONFLICT (version) DO UPDATE SET card = EXCLUDED.card,
-                          map_verification = EXCLUDED.map_verification, active = true, promoted_at = now()""",
+                          map_verification = EXCLUDED.map_verification, s3_key = EXCLUDED.s3_key,
+                          feature_spec_hash = EXCLUDED.feature_spec_hash, active = true, promoted_at = now()""",
                      (version, json.dumps(card), json.dumps(verification), keys.model(version, "hydra.onnx"),
                       card["feature_spec_hash"]))
         conn.commit()

@@ -72,10 +72,19 @@ def test_cloud_mask_v003_uses_flags_by_name():
     m[..., 6] = 6.3
     assert not emit.cloud_from_mask(m, V003).any()
     m[1, 2, 5] = 1.0                                     # SpecTf cloud flag
-    m[3, 0, 3] = 1.0                                     # dilated cloud flag
+    m[3, 0, 1] = 1.0                                     # cirrus
     m[0, 4, 2] = 1.0                                     # water is not cloud
     got = emit.cloud_from_mask(m, V003)
     assert got[1, 2] and got[3, 0] and not got[0, 4] and got.sum() == 2
+
+
+def test_cloud_mask_v003_ignores_legacy_flags_over_bright_ground():
+    # Death Valley 2023-10-15 (0 % cloud): legacy flag on bright salt, dilated to the whole box
+    m = np.zeros((4, 5, 7), np.float32)
+    m[0, 0, 0] = 1.0                                     # legacy Cloud Flag speck
+    m[..., 3] = 1.0                                      # Dilated Cloud Flag everywhere
+    m[..., 4] = 0.003                                    # SpecTf probability ~0
+    assert not emit.cloud_from_mask(m, V003).any()
 
 
 def test_cloud_mask_legacy_layout_without_names():

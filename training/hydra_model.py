@@ -2,7 +2,7 @@
 HydraNet: one network, three input stems, a shared trunk, three heads.
 
     x_agri (22)     -> AgriStem    -+
-    x_mineral (275) -> MineralStem -+-> + task embedding -> shared trunk -> [trunk | stem] -> head
+    x_mineral (530) -> MineralStem -+-> + task embedding -> shared trunk -> [trunk | stem] -> head
     x_thermal (10)  -> ThermalStem -+
 
 Normalisation, output scaling and softmaxes are inside the graph, so the
@@ -15,12 +15,11 @@ import torch.nn.functional as F
 
 from hydra import spec
 
-WIDTH = 192
-N_CR = 255
-N_SCALAR = spec.N_MINERAL_FEATURES - N_CR       # 7 depths + 12 SAM + brightness
+N_SPECTRUM = spec.RAW_SLICE.stop                  # 255 continuum-removed + 255 raw reflectance
+SCALAR0 = spec.DEPTH_SLICE.start                   # 7 depths + 12 SAM + brightness follow the spectra
+N_SCALAR = spec.N_MINERAL_FEATURES - SCALAR0       # 20
 N_SAM = len(spec.MINERALS)
-SAM0 = N_CR + len(spec.DIAGNOSTIC_FEATURES)     # first SAM-angle column
-N_STRUCT = 2 * N_SAM + 2                         # sam_structure() width
+N_STRUCT = 2 * N_SAM + 2                           # sam_structure() width
 
 
 class Standardize(nn.Module):
@@ -54,17 +53,18 @@ def mlp(i, o, h=None):
 
 
 class MineralStem(nn.Module):
-    """1-D conv over the continuum-removed spectrum + MLP over the 20 scalars."""
+    """
+    Dense-only (lightweight, CPU-fast) stem: both spectra (continuum-removed shape +
+    raw reflectance albedo/slope) through one MLP, the 20 scalars and the SAM
+    decision structure through another.
+    """
 
     def __init__(self, w):
         super().__init__()
         self.norm = Standardize(spec.N_MINERAL_FEATURES)
-        self.conv = nn.Sequential(
-            nn.Conv1d(1, 16, 7, padding=3), nn.GELU(), nn.MaxPool1d(2),
-            nn.Conv1d(16, 32, 5, padding=2), nn.GELU(), nn.MaxPool1d(2),
-            nn.Conv1d(32, 64, 3, padding=1), nn.GELU(), nn.AvgPool1d(kernel_size=7, stride=7))
-        self.scalars = mlp(N_SCALAR + N_STRUCT, 128, 128)
-        self.out = mlp(64 * 9 + 128, w, w)
+        self.spectrum = nn.Sequential(nn.Linear(N_SPECTRUM, 128), nn.GELU(), nn.Linear(128, 96), nn.GELU())
+        self.scalars = mlp(N_SCALAR + N_STRUCT, 64, 64)
+        self.out = mlp(96 + 64, w, w)
 
     @staticmethod
     def sam_structure(x_raw):
@@ -73,7 +73,7 @@ class MineralStem(nn.Module):
         each angle minus the smallest (the winner is the zero) and the best
         angle's margin to the 'unknown' threshold. Brightness-free by design.
         """
-        sam = x_raw[:, SAM0:SAM0 + N_SAM]
+        sam = x_raw[:, spec.SAM_SLICE]
         best = sam.min(dim=1, keepdim=True).values
         rel = sam - best
         # high-gain copy: resolves near-ties of 1e-4 rad (real quartz vs gypsum pixels sit there)
@@ -84,28 +84,11 @@ class MineralStem(nn.Module):
     def forward(self, x_raw):
         x = self.norm(x_raw)
         s = self.sam_structure(x_raw)
-        c = self.conv(x[:, :N_CR].unsqueeze(1)).flatten(1)
-        return self.out(torch.cat([c, self.scalars(torch.cat([x[:, N_CR:], s], dim=1))], dim=1)), s
-
-
-class MLPMineralStem(MineralStem):
-    """Dense-only stem: the spectrum through an MLP, no convolutions (lighter, faster on CPU)."""
-
-    def __init__(self, w):
-        nn.Module.__init__(self)
-        self.norm = Standardize(spec.N_MINERAL_FEATURES)
-        self.spectrum = nn.Sequential(nn.Linear(N_CR, 128), nn.GELU(), nn.Linear(128, 96), nn.GELU())
-        self.scalars = mlp(N_SCALAR + N_STRUCT, 64, 64)
-        self.out = mlp(96 + 64, w, w)
-
-    def forward(self, x_raw):
-        x = self.norm(x_raw)
-        s = self.sam_structure(x_raw)
-        h = torch.cat([self.spectrum(x[:, :N_CR]), self.scalars(torch.cat([x[:, N_CR:], s], dim=1))], dim=1)
+        h = torch.cat([self.spectrum(x[:, :N_SPECTRUM]), self.scalars(torch.cat([x[:, SCALAR0:], s], dim=1))], dim=1)
         return self.out(h), s
 
 
-ARCHS = {"conv": (MineralStem, 192, 3), "mlp": (MLPMineralStem, 128, 2)}
+ARCHS = {"mlp": (MineralStem, 128, 2)}
 
 
 class HydraNet(nn.Module):

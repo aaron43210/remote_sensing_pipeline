@@ -7,9 +7,14 @@ and continuously re-checked to be the **same map the classical method draws**:
 
 | Map | Classical method HydraNet reproduces | Agreement on the deployed ONNX file |
 |---|---|---|
-| Minerals | SAM class (USGS library, 0.20 rad → unknown) + SMA/FCLS abundances + quality | class 99.96 % (scenes), **99.85 % on 2,000 real EMIT pixels** |
-| Agriculture | PROSAIL look-up-table inversion (k = 20) | Cab / Cw / LAI within 1.6 / 1.4 / 3.4 % of range |
-| Thermal | `ThermalAnomalyDetector`: global/local z, UHI p80/p20, hotspots p95 | ≥ 99.2 % on **6 real Landsat scenes** |
+| Minerals | SAM class (USGS library, 0.20 rad → unknown) + SMA/FCLS abundances + quality | on 2 **real EMIT scenes never trained on**: class 100 % / 99.99 %, abundance error 0.003 / 0.0015, quality error 0.004 / 0.002 |
+| Agriculture | PROSAIL look-up-table inversion (k = 20) | Cab / Cw / LAI within 1.7 / 1.5 / 3.4 % of range (real Fresno job: 1.8 / 2.1 / 1.7 %) |
+| Thermal | `ThermalAnomalyDetector`: global/local z, UHI p80/p20, hotspots p95 | ≥ 99.6 % overall, every map ≥ 98.8 % on each of **6 real Landsat scenes** |
+
+Model v1: lightweight MLP, 502k parameters, 2.06 MB ONNX, 530 mineral inputs
+(continuum-removed + raw reflectance), trained on USGS mixtures (with dry
+vegetation and soil moisture) plus 200k real EMIT pixels from 5 scenes cleaned
+by the production preprocessing (`training/README.md`).
 
 Full numbers: `training/artifacts/models/v1/{model_card.json,map_verification.md}`
 and the **Platform** page of the app.
@@ -106,11 +111,11 @@ Moving to another S3-compatible provider later: endpoint + keys in `.env`.
 
 ## Known limitations (honest list)
 
-* **Mineral abundances on real EMIT pixels** differ from SMA by MAE 0.078 (gate 0.06), measured on the
-  2,000 pseudo-labelled real rows; the network sees the 275 continuum-removed features, SMA sees raw
-  reflectance. v1 was promoted with `--force` (recorded in the registry and on the Platform page). Class maps
-  are unaffected (99.85 %). Next step: validate on real scenes (needs an Earthdata login) and, if confirmed,
-  add reflectance-level inputs.
-* EMIT download/orthorectification is unit-tested on a file with EMIT's exact layout, not yet on a real
-  granule (needs Earthdata credentials).
-* Thermal labels are the detector's rules (the dataset has no labels); FIRMS active-fire points are the v2 path.
+* **Real-imagery coverage:** minerals are validated on 7 real EMIT scenes in California and agriculture on
+  real Central Valley farmland; other regions, seasons and sensors are not yet. Add scenes with
+  `training/harvest_emit.py` and retrain.
+* Labels are the classical methods' outputs: HydraNet reproduces SAM/SMA/PROSAIL/the thermal rules; it does
+  not measure anything they cannot (ground truth is the path to exceed them).
+* Thermal: the hardest real scene (Tulare farms, many pixels at the p95 hotspot threshold) agrees 98.8 % on
+  hotspots, the others ≥ 99.9 %; `verify_maps.py` gates every scene at ≥ 98 %.
+* Thermal labels are the detector's rules (the dataset has no labels); NASA FIRMS active-fire points are the next step.

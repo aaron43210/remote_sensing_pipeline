@@ -138,8 +138,6 @@ func (s *Server) activeModel(ctx context.Context) string {
 	return v
 }
 
-// requestHash identifies "the same request": same area (to ~10 m), tasks,
-// dates, source and model. Identical requests share one computation.
 // emitCandidates lists, clearest first then newest (the order ingestion picks in),
 // the catalogued EMIT scenes that fully cover the box in the job's dates. They
 // travel with the request so ingestion still works while NASA's search is down.
@@ -187,6 +185,25 @@ func contains(xs []string, x string) bool {
 	return false
 }
 
+// modelIdentity names the exact active model for result reuse: version, feature
+// spec and promotion time, so re-promoting a version (or a new model under an old
+// name) never serves results computed by a different network.
+func (s *Server) modelIdentity(ctx context.Context) string {
+	var v, hash string
+	var at *time.Time
+	if err := s.DB.QueryRow(ctx, `SELECT version, feature_spec_hash, promoted_at FROM model_versions WHERE active`).
+		Scan(&v, &hash, &at); err != nil {
+		return "none"
+	}
+	promoted := int64(0)
+	if at != nil {
+		promoted = at.Unix()
+	}
+	return fmt.Sprintf("%s|%s|%d", v, hash, promoted)
+}
+
+// requestHash identifies "the same request": same area (to ~10 m), tasks,
+// dates, source and model identity. Identical requests share one computation.
 func requestHash(req createJob, model string) string {
 	r := func(v float64) string { return strconv.FormatFloat(math.Round(v*1e4)/1e4, 'f', 4, 64) }
 	key := strings.Join([]string{r(req.BBox[0]), r(req.BBox[1]), r(req.BBox[2]), r(req.BBox[3]),
@@ -249,7 +266,7 @@ func (s *Server) CreateJob(c *gin.Context) {
 	}
 
 	model := s.activeModel(ctx)
-	hash := requestHash(req, model)
+	hash := requestHash(req, s.modelIdentity(ctx))
 	jobID := "job_" + strings.ReplaceAll(uuid.NewString(), "-", "")[:20]
 
 	// Reuse a finished identical job, or attach to one that is running.

@@ -28,3 +28,5 @@ training/artifacts/data/*
 !training/artifacts/data/agri_lut.npz
 frontend/node_modules/
 *.egg-info/
+# generated report output (figures, screenshots, job records of test accounts)
+docs/report/build/

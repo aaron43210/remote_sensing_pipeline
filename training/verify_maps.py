@@ -37,6 +37,9 @@ MAP_GATES = {
     "thermal_local_anomaly": ("pixel_agreement", 0.99),
     "thermal_hotspots": ("pixel_agreement", 0.99),
 }
+# Every thermal map of EVERY real Landsat scene, not only the average: one hard scene
+# (Tulare farms, hotspots near the p95 threshold) must not hide behind five easy ones.
+REAL_SCENE_FLOOR = 0.98
 
 # Real scenes: (name, bbox, date window). Several land covers and seasons.
 LANDSAT_SCENES = [
@@ -143,6 +146,12 @@ def main(argv=None):
     th_scenes, th_info = ([], []) if a.no_landsat else verify_landsat(rt)
     agg = {**_combine(emit_scenes), **_combine(th_scenes)}
     gates = gate(agg)
+    scene_values = [(s["scene"], k, v) for s in th_info for k, v in s.get("agreement", {}).items() if v is not None]
+    if scene_values:
+        worst = min(scene_values, key=lambda t: t[2])
+        gates["thermal_real_scene_min"] = {"metric": "pixel_agreement", "value": round(worst[2], 5),
+                                           "threshold": REAL_SCENE_FLOOR, "passed": worst[2] >= REAL_SCENE_FLOOR,
+                                           "worst": f"{worst[0]}/{worst[1]}"}
     passed = all(g["passed"] for g in gates.values() if g["passed"] is not None)
     report = {"model_version": rt.version, "feature_spec_hash": spec.feature_spec_hash(),
               "gates": gates, "all_passed": passed, "aggregate": agg,

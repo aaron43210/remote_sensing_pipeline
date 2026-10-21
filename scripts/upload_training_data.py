@@ -3,7 +3,8 @@ Version the training data in the lake's Gold layer.
 
     python scripts/upload_training_data.py --raw-root .. --generated training/artifacts/data --version v1
 
-    gold/training/raw/<Domain>/<file>          the CSVs as delivered (Agriculture, Mineral, Thermal)
+    gold/training/raw/<DOMAIN>/<file>          the files as delivered (AGRICULTURE, MINERAL, THERMAL)
+    gold/training/real_scenes/<granule>.npz    real EMIT pixels cleaned by production preprocessing
     gold/training/<version>/<name>.npz         the teacher-labelled sets datagen.py produced
     gold/training/<version>/manifest.json      sizes, sha256 of every file, spec hash
 """
@@ -31,13 +32,17 @@ def main(argv=None):
     ap.add_argument("--version", required=True)
     a = ap.parse_args(argv)
     files = {}
-    for domain in ("Agriculture", "Mineral", "Thermal"):
+    for domain in ("AGRICULTURE", "MINERAL", "THERMAL"):
         for p in sorted((Path(a.raw_root) / domain).glob("*")):
             if p.is_file():
                 key = f"gold/training/raw/{domain}/{p.name}"
                 storage.put_file(key, p)
                 files[key] = {"bytes": p.stat().st_size, "sha256": sha256(p)}
     gen = Path(a.generated)
+    for p in sorted((gen / "real_scenes").glob("*.npz")):     # harvested EMIT pixels (harvest_emit.py)
+        key = f"gold/training/real_scenes/{p.name}"
+        storage.put_file(key, p)
+        files[key] = {"bytes": p.stat().st_size, "sha256": sha256(p)}
     for p in sorted(gen.glob("*.npz")):
         key = f"gold/training/{a.version}/{p.name}"
         storage.put_file(key, p)

@@ -76,13 +76,13 @@ class MineralTeacher:
     def label(self, reflectance, x=None):
         """
         reflectance: (n, 255) on the EMIT good-band grid.
-        x: the 275 features if already computed (saves the continuum removal).
+        x: the 530 features if already computed (saves the continuum removal).
         Returns dict(class_index (n,) int, abundances (n, 12), quality (n,), min_angle (n,)).
         """
         r = np.atleast_2d(np.asarray(reflectance, dtype=float))
         if x is None:
             x = self.features.transform(r)
-        angles = x[:, 255 + len(spec.DIAGNOSTIC_FEATURES):255 + len(spec.DIAGNOSTIC_FEATURES) + 12].astype(float)
+        angles = x[:, spec.SAM_SLICE].astype(float)
         valid = ~np.isnan(angles).all(axis=1)
         cls = np.full(r.shape[0], INVALID, dtype=np.int64)
         min_angle = np.full(r.shape[0], np.nan)
