@@ -5,8 +5,11 @@ Training/evaluation sets for HydraNet, every label produced by the classical tea
     python -m datagen --only mineral
 
 Outputs (npz, float32) + a manifest with sizes, seeds and spec hash:
-    mineral_train / mineral_val   synthetic: owner's 62,400 (seed 0) + coverage set
-    mineral_real                  dataset_sample.csv rows (real EMIT, teacher labels as published)
+    mineral_train / mineral_val   USGS mixtures (owner's 62,400 + coverage + near-ties + NPV/moisture
+                                  nuisances) + the training_sample.csv spectra + real EMIT bare pixels
+                                  (harvest_emit.py, production preprocessing), all teacher-labelled
+    mineral_real                  dataset_sample.csv (the owner's real scene, the benchmark)
+    mineral_real_holdout          a whole EMIT scene never trained on (Death Valley)
     agri_lut                      the LUT the classical inversion uses
     agri_train / agri_val         PROSAIL spectra (+ nuisance variation, noise) -> LUT labels
     agri_csv                      the 10,000 CSV rows -> LUT labels (plus true params)
@@ -29,7 +32,8 @@ from hydra.classical import agri_lut, thermal as thermal_rules
 from hydra.classical.library import aligned_library
 from hydra.classical.mineral import MineralTeacher
 from hydra.features import agri as agri_features
-from hydra.features.mineral import MineralFeatures
+from hydra.features.masks import pixel_classes
+from hydra.features.mineral import MineralFeatures, to_good_bands
 from hydra.features.thermal import raster_features
 from hydra.synthetic import synthetic_lst
 
@@ -133,26 +137,105 @@ def near_tie_set(endmembers, n, rng):
     return np.clip(s, 0.001, 1.5)
 
 
-def build_mineral(out, data_root, n_coverage, seed, n_ties=40_000):
+# Non-mineral nuisances of the owner's forward model (Mineral_Analysis_Datasets_Specification, §5):
+#   R = [(1 - f_bg) * sum(a_i E_i) + f_bg * NPV] * moisture_attenuation * b + noise
+NPV_SHARE, NPV_FRACTION = 0.35, (0.05, 0.35)
+MOISTURE_SHARE = 0.30
+
+
+def _gauss(wl, centre, width):
+    return np.exp(-0.5 * ((wl - centre) / width) ** 2)
+
+
+def npv_spectra(n, rng, wl):
+    """Dry plant litter: rising VNIR, cellulose/lignin dips at ~1730, 2100 and 2300 nm."""
+    x = (wl - 380.0) / 2120.0
+    lo, hi = rng.uniform(0.04, 0.10, (n, 1)), rng.uniform(0.30, 0.50, (n, 1))
+    base = lo + (hi - lo) * (1 - np.exp(-x[None, :] * rng.uniform(3, 6, (n, 1))))
+    dips = (rng.uniform(0.02, 0.06, (n, 1)) * _gauss(wl, 1730, 30)
+            + rng.uniform(0.10, 0.25, (n, 1)) * _gauss(wl, 2100, 60)
+            + rng.uniform(0.05, 0.15, (n, 1)) * _gauss(wl, 2300, 45)
+            + rng.uniform(0.00, 0.05, (n, 1)) * (_gauss(wl, 1450, 50) + _gauss(wl, 1940, 60)))
+    return np.clip(base * (1 - dips), 0.001, 1.0)
+
+
+def moisture_attenuation(n, rng, wl):
+    """Soil moisture: liquid-water absorptions (~970, 1200, 1450, 1940 nm), darker SWIR."""
+    m = rng.uniform(0.1, 1.0, (n, 1))
+    tau = (0.05 * _gauss(wl, 970, 30) + 0.10 * _gauss(wl, 1200, 40) + 0.45 * _gauss(wl, 1450, 60)
+           + 0.70 * _gauss(wl, 1940, 70) + 0.25 * np.clip((wl - 1300) / 1200, 0, 1))
+    return np.exp(-m * tau[None, :]) * (1 - 0.15 * m)
+
+
+def nuisance_set(endmembers, wl, n, rng):
+    """USGS mixtures under dry vegetation (35 %) and soil moisture (30 %), at real brightness."""
+    s, _ = simulate_minerals(endmembers, n, rng, brightness=(0.3, 1.3), noise=(0.002, 0.015))
+    npv = rng.random(n) < NPV_SHARE
+    f = rng.uniform(*NPV_FRACTION, (n, 1)) * npv[:, None]
+    s = (1 - f) * s + f * npv_spectra(n, rng, wl)
+    wet = rng.random(n) < MOISTURE_SHARE
+    s[wet] *= moisture_attenuation(int(wet.sum()), rng, wl)
+    return np.clip(s, 0.001, 1.5)
+
+
+REAL_HOLDOUT = "EMIT_L2A_RFL_002_20231015T215146"   # Death Valley: never trained on, scored as an unseen scene
+REAL_PER_SCENE = 40_000                              # bare pixels per training scene
+
+
+def real_scene_pixels(real_dir, rng):
+    """
+    Bare-ground pixels of every harvested EMIT granule (training/harvest_emit.py:
+    cleaned by the production preprocessing), on the 255-band grid.
+    Returns {granule_id: reflectance (n, 255)}.
+    """
+    out = {}
+    for f in sorted(Path(real_dir).glob("EMIT_L2A_RFL_*.npz")):
+        d = np.load(f)
+        refl, wl = d["reflectance"], d["wavelengths"]
+        classes = pixel_classes(refl[:, None, :], wl)[:, 0]          # the routing production uses
+        bare = refl[classes == 3]
+        if len(bare) > REAL_PER_SCENE:
+            bare = bare[rng.choice(len(bare), REAL_PER_SCENE, replace=False)]
+        good = to_good_bands(bare, wl).astype(np.float32)
+        out[str(d["granule_id"])] = good[np.isfinite(good).all(1)]
+    return out
+
+
+def build_mineral(out, data_root, n_coverage, seed, n_ties=40_000, n_nuisance=60_000, real_dir=None):
+    """
+    Every label comes from the classical teacher (SAM + SMA + quality), which
+    reproduces the real-scene benchmark exactly (test_mineral_parity).
+    Sources: 0 owner USGS mixtures, 1 coverage/near-tie/nuisance mixtures,
+    2 the training_sample.csv spectra, 3 real EMIT pixels (training scenes).
+    """
     feats = MineralFeatures()
     teacher = MineralTeacher(feats)
     wl = feats.wavelengths
     _, em = aligned_library(wl)
     rng = np.random.default_rng(seed)
-    owner = owner_training_set(em)
-    spectra = np.vstack([owner, coverage_set(em, wl, n_coverage, rng), near_tie_set(em, n_ties, rng)])
-    source = np.r_[np.zeros(62_400, np.int8), np.ones(spectra.shape[0] - 62_400, np.int8)]
-    x = feats.transform(spectra)
 
-    owner_csv = Path(data_root) / "Mineral" / "training_sample.csv"
-    if owner_csv.exists():       # the regenerated set must BE the owner's set
-        ref = pd.read_csv(owner_csv, nrows=2000)[spec.mineral_feature_names()].values
-        diff = float(np.nanmax(np.abs(x[:2000] - ref)))
-        if diff > 1e-4:
-            raise RuntimeError(f"owner training set not reproduced (max diff {diff})")
+    train_csv = spec.dataset_file(data_root, "mineral", "training_sample.csv")
+    real_csv = spec.dataset_file(data_root, "mineral", "dataset_sample.csv")
+    raw_cols = spec.mineral_feature_names()[spec.RAW_SLICE]
+    for csv in (train_csv, real_csv):           # our features must BE the owner's (same 530 columns)
+        if csv.exists():
+            d = pd.read_csv(csv)
+            diff = float(np.nanmax(np.abs(feats.transform(d[raw_cols].values) - d[spec.mineral_feature_names()].values)))
+            if diff > 1e-4:
+                raise RuntimeError(f"features do not reproduce {csv.name} (max diff {diff})")
+    v2_sample = pd.read_csv(train_csv)[raw_cols].values if train_csv.exists() else np.empty((0, wl.size))
+
+    real = real_scene_pixels(real_dir, rng) if real_dir else {}
+    holdout = real.pop(REAL_HOLDOUT, None)
+    parts = [(owner_training_set(em), 0), (coverage_set(em, wl, n_coverage, rng), 1),
+             (near_tie_set(em, n_ties, rng), 1), (nuisance_set(em, wl, n_nuisance, rng), 1), (v2_sample, 2)]
+    parts += [(r, 3) for r in real.values()]
+    spectra = np.vstack([p for p, _ in parts]).astype(np.float64)
+    source = np.concatenate([np.full(len(p), k, np.int8) for p, k in parts])
+    x = feats.transform(spectra)
     lab = teacher.label(spectra, x)
     ok = (lab["class_index"] >= 0) & np.isfinite(lab["abundances"]).all(1) & np.isfinite(x).all(1)
-    x, spectra, source = x[ok], spectra[ok], source[ok]
+    x, source = x[ok], source[ok]
     lab = {k: v[ok] for k, v in lab.items()}
     idx = rng.permutation(x.shape[0])
     n_val = max(5000, x.shape[0] // 10)
@@ -161,17 +244,25 @@ def build_mineral(out, data_root, n_coverage, seed, n_ties=40_000):
                             y_abund=lab["abundances"][sel].astype(np.float32),
                             y_quality=lab["quality"][sel].astype(np.float32), source=source[sel])
 
-    csv = Path(data_root) / "Mineral" / "dataset_sample.csv"
-    if csv.exists():
-        d = pd.read_csv(csv)
-        xr = d[spec.mineral_feature_names()].values.astype(np.float32)
-        cls = np.array([spec.MINERALS.index(n) for n in d["label_name"]])
-        np.savez_compressed(out / "mineral_real.npz", x=xr, y_class=cls,
-                            y_abund=d[[f"abund_{m}" for m in spec.MINERALS]].values.astype(np.float32),
-                            y_quality=d["quality"].values.astype(np.float32))
+    def save_real(name, refl):                 # an evaluation scene, labelled by the same teacher
+        xr = feats.transform(refl)
+        lr = teacher.label(refl, xr)
+        keep = (lr["class_index"] >= 0) & np.isfinite(lr["abundances"]).all(1) & np.isfinite(xr).all(1)
+        np.savez_compressed(out / f"{name}.npz", x=xr[keep], y_class=lr["class_index"][keep],
+                            y_abund=lr["abundances"][keep].astype(np.float32),
+                            y_quality=lr["quality"][keep].astype(np.float32))
+        return int(keep.sum())
+
+    evals = {}
+    if real_csv.exists():                      # the owner's real scene (benchmark)
+        evals["mineral_real"] = save_real("mineral_real", pd.read_csv(real_csv)[raw_cols].values)
+    if holdout is not None:                    # a whole EMIT scene never seen in training
+        evals["mineral_real_holdout"] = save_real("mineral_real_holdout", holdout)
     counts = np.bincount(lab["class_index"], minlength=13)
-    return {"n": int(x.shape[0]), "n_val": int(n_val), "class_counts":
-            dict(zip(spec.MINERAL_CLASSES, map(int, counts)))}
+    return {"n": int(x.shape[0]), "n_val": int(n_val),
+            "by_source": {k: int((source == i).sum()) for i, k in enumerate(("owner_usgs", "usgs_mixtures", "owner_sample", "real_emit"))},
+            "real_training_scenes": sorted(real), "real_holdout_scene": REAL_HOLDOUT if holdout is not None else None,
+            "eval_sets": evals, "class_counts": dict(zip(spec.MINERAL_CLASSES, map(int, counts)))}
 
 
 # ── Agriculture ──────────────────────────────────────────────────────────────
@@ -238,7 +329,7 @@ def build_agri(out, data_root, n_lut, n_train, seed):
         np.savez_compressed(out / f"{name}.npz", x=s[sel], y_params=lab["params"][sel].astype(np.float32),
                             y_std=lab["std"][sel].astype(np.float32), true_params=params[sel].astype(np.float32))
 
-    csv = Path(data_root) / "Agriculture" / "RTM_NN_TRAINING_DATASET_WAVELENGTHS.csv"
+    csv = spec.dataset_file(data_root, "agriculture", "RTM_NN_TRAINING_DATASET_WAVELENGTHS.csv")
     if csv.exists():
         d = pd.read_csv(csv)
         xc = d[agri_features.dataset_columns()].values.astype(np.float32)
@@ -286,6 +377,8 @@ def main(argv=None):
     ap.add_argument("--thermal-scenes", type=int, default=400)
     ap.add_argument("--thermal-per-scene", type=int, default=3000)
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--real-dir", default="artifacts/data/real_scenes",
+                    help="harvested EMIT scenes (harvest_emit.py); skipped if missing")
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -293,7 +386,8 @@ def main(argv=None):
     manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
     manifest.update({"spec_hash": spec.feature_spec_hash(), "seed": a.seed})
     if a.only in (None, "mineral"):
-        manifest["mineral"] = build_mineral(out, a.data_root, a.mineral_coverage, a.seed)
+        real_dir = a.real_dir if Path(a.real_dir).is_dir() else None
+        manifest["mineral"] = build_mineral(out, a.data_root, a.mineral_coverage, a.seed, real_dir=real_dir)
         print("mineral", manifest["mineral"], flush=True)
     if a.only in (None, "agri"):
         manifest["agri"] = build_agri(out, a.data_root, a.agri_lut, a.agri_train, a.seed + 1)

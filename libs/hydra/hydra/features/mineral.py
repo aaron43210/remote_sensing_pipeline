@@ -1,11 +1,15 @@
 """
-Reflectance -> the 275-feature mineral vector.
+Reflectance -> the 530-feature mineral vector.
 
-Same transform as services/mineral_analysis/rtm_inversion/features.py, which
-built training_sample.csv and dataset_sample.csv (verified to 5e-7):
+Same transform as services/mineral_analysis/rtm_inversion/features.py
+(FeatureExtractor(include_raw_reflectance=True)), which built the
+training_sample.csv and dataset_sample.csv (verified to 1e-5):
 
-    255 continuum-removed good bands | 7 absorption depths |
+    255 continuum-removed good bands | 255 raw reflectance | 7 absorption depths |
     12 SAM angles to the continuum-removed USGS library | brightness
+
+The raw reflectance carries the albedo and slope that unmixing (SMA) and its
+fit quality depend on, which continuum removal discards.
 """
 
 import warnings
@@ -47,7 +51,7 @@ class MineralFeatures:
                          for lo, hi in spec.DIAGNOSTIC_FEATURES.values()]
 
     def transform(self, reflectance, return_cr=False):
-        """(n, 255) reflectance on the good-band grid -> (n, 275) float32."""
+        """(n, 255) reflectance on the good-band grid -> (n, 530) float32."""
         r = np.atleast_2d(np.asarray(reflectance, dtype=np.float64))
         if r.shape[1] != self.wavelengths.size:
             raise ValueError(f"expected {self.wavelengths.size} bands, got {r.shape[1]}")
@@ -59,7 +63,7 @@ class MineralFeatures:
                 depths[:, j] = np.clip(1.0 - np.nanmin(cr[:, win], axis=1), 0.0, 1.0)
             brightness = np.nanmean(r, axis=1, keepdims=True)
         angles = spectral_angles(cr, self.endmembers_cr)
-        x = np.hstack([cr, depths, angles, brightness]).astype(np.float32)
+        x = np.hstack([cr, r, depths, angles, brightness]).astype(np.float32)
         return (x, cr) if return_cr else x
 
 

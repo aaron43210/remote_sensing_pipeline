@@ -26,6 +26,7 @@ const NAMES = {
   thermal_uhi_class: 'Heat zones (urban / rural)',
   thermal_hotspots: 'Hotspots',
   thermal_local_anomaly: 'Local anomalies (11×11)',
+  thermal_real_scene_min: 'Worst real Landsat scene (every thermal map)',
 }
 
 export function layerLabel(name) {

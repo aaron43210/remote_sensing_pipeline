@@ -27,8 +27,13 @@ GATES = {
     "mineral_val.class_agreement": 0.98,
     "mineral_val.abundance_mae": 0.03,
     "mineral_val.quality_mae": 0.03,
-    "mineral_real.class_agreement": 0.97,  # real EMIT pixels: same class as SAM
-    "mineral_real.abundance_mae": 0.06,    # domain-gap abundance check
+    # real EMIT, never trained on: the owner's real benchmark scene, and a whole held-out scene
+    "mineral_real.class_agreement": 0.97,
+    "mineral_real.abundance_mae": 0.05,
+    "mineral_real.quality_mae": 0.05,
+    "mineral_real_holdout.class_agreement": 0.97,
+    "mineral_real_holdout.abundance_mae": 0.05,
+    "mineral_real_holdout.quality_mae": 0.05,
     "agri_val.r2_min_core": 0.95,          # Cab, Cw, LAI vs the LUT inversion
     "agri_csv.r2_min_core": 0.95,
     "thermal_val.global_agreement": 0.99,
@@ -155,7 +160,8 @@ def train(args):
     np.random.seed(args.seed)
     torch.set_num_threads(args.threads)
     tr = {t: load(args.data, f"{t}_train") for t in ("agri", "mineral", "thermal")}
-    val = {n: load(args.data, n) for n in ("agri_val", "agri_csv", "mineral_val", "mineral_real", "thermal_val")}
+    val = {n: load(args.data, n) for n in ("agri_val", "agri_csv", "mineral_val", "mineral_real",
+                                            "mineral_real_holdout", "thermal_val")}
 
     net = HydraNet(arch=args.arch)
     net.agri_norm.set(*norm_stats(tr["agri"]["x"]))
@@ -275,7 +281,7 @@ def main(argv=None):
     ap.add_argument("--eval-every", type=int, default=1000)
     ap.add_argument("--threads", type=int, default=8)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--arch", choices=["mlp", "conv"], default="mlp")
+    ap.add_argument("--arch", choices=["mlp"], default="mlp")
     args = ap.parse_args(argv)
 
     out = Path(args.out) / args.version

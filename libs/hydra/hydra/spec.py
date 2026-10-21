@@ -18,7 +18,7 @@ import numpy as np
 DATA_DIR = Path(__file__).resolve().parent / "data"
 USGS_LIBRARY_DIR = DATA_DIR / "usgs_library"
 
-SPEC_VERSION = 1
+SPEC_VERSION = 2          # feature-layout revision (hashed into the model): 530 mineral features
 
 # ── Mineral (EMIT, 255 good bands, USGS library) ────────────────────────────
 MINERALS = ("alunite", "calcite", "chlorite", "dolomite", "goethite", "gypsum",
@@ -43,7 +43,14 @@ SAM_MAX_ANGLE = 0.20       # radians; larger best angle -> "unknown"
 SMA_MAX_RMSE = 0.10        # reflectance units
 SMA_SUM_WEIGHT = 1e3       # weight of the sum-to-one row in FCLS
 
-N_MINERAL_FEATURES = 255 + len(DIAGNOSTIC_FEATURES) + len(MINERALS) + 1   # 275
+# Mineral feature layout (identical to training_sample.csv / dataset_sample.csv columns 0-529):
+#   255 continuum-removed | 255 raw reflectance | 7 depths | 12 SAM angles | brightness
+N_GOOD_BANDS = 255
+CR_SLICE = slice(0, N_GOOD_BANDS)
+RAW_SLICE = slice(N_GOOD_BANDS, 2 * N_GOOD_BANDS)
+DEPTH_SLICE = slice(2 * N_GOOD_BANDS, 2 * N_GOOD_BANDS + len(DIAGNOSTIC_FEATURES))
+SAM_SLICE = slice(DEPTH_SLICE.stop, DEPTH_SLICE.stop + len(MINERALS))
+N_MINERAL_FEATURES = SAM_SLICE.stop + 1                                    # 530 (+ brightness)
 
 # ── Agriculture (PROSAIL) ───────────────────────────────────────────────────
 # The 24 wavelengths of RTM_NN_TRAINING_DATASET_WAVELENGTHS.csv minus 1357 and
@@ -79,6 +86,20 @@ THERMAL_GLOBAL_CLASSES = ("cold", "normal", "hot")
 THERMAL_UHI_CLASSES = ("rural", "neutral", "urban")
 
 
+def dataset_file(root, domain, *names):
+    """
+    A project dataset file: <root>/<DOMAIN>/<name> (the current upper-case folders)
+    or <root>/<Domain>/<name> (older checkouts); the first name that exists wins.
+    Linux is case-sensitive, so both spellings are tried explicitly.
+    """
+    root = Path(root)
+    for folder in (domain.upper(), domain.capitalize()):
+        for name in names:
+            if (root / folder / name).exists():
+                return root / folder / name
+    return root / domain.upper() / names[0]
+
+
 @lru_cache(maxsize=1)
 def emit_bands():
     """(wavelengths_nm (285,), good_mask (285,)) of the EMIT sensor."""
@@ -95,6 +116,7 @@ def emit_good_wavelengths():
 
 def mineral_feature_names():
     names = [f"cr_{w:.1f}nm" for w in emit_good_wavelengths()]
+    names += [f"refl_{w:.1f}nm" for w in emit_good_wavelengths()]
     names += [f"depth_{k}" for k in DIAGNOSTIC_FEATURES]
     names += [f"sam_{m}" for m in MINERALS]
     return names + ["brightness"]

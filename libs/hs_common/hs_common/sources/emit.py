@@ -231,7 +231,8 @@ def ortho_crop(nc_path, bbox, var="reflectance"):
     return cube, wl, good, georef
 
 
-CLOUD_FLAGS = ("Cloud Flag", "Cirrus Flag", "Dilated Cloud Flag", "Spacecraft Flag", "SpecTf-Cloud Flag")
+CLOUD_FLAGS = ("Cloud Flag", "Cirrus Flag", "Dilated Cloud Flag", "Spacecraft Flag")
+SPECTF_FLAGS = ("SpecTf-Cloud Flag", "Cirrus Flag", "Spacecraft Flag")
 
 
 def cloud_from_mask(mask_cube, band_names=None):
@@ -241,9 +242,16 @@ def cloud_from_mask(mask_cube, band_names=None):
     v003 is cloud, cirrus, water, dilated cloud, SpecTf probability, SpecTf flag,
     buffer distance. Continuous bands (probability, AOD, H2O, distance) are never
     used as flags. Without names (old files) the v001/002 positions apply.
+
+    When the granule carries the SpecTf-Cloud flag (v003), it replaces the legacy
+    threshold "Cloud Flag" / "Dilated Cloud Flag": over bright ground those flag
+    salt flats and playas, and the dilation spreads them (a 0 %-cloud Death Valley
+    scene: legacy 0.7 % flagged -> 100 % dilated; SpecTf 0 %).
     """
     if band_names is not None and len(band_names) and isinstance(band_names[0], str):
-        idx = [i for i, n in enumerate(band_names) if n.strip() in CLOUD_FLAGS]
+        names = [str(n).strip() for n in band_names]
+        flags = SPECTF_FLAGS if "SpecTf-Cloud Flag" in names else CLOUD_FLAGS
+        idx = [i for i, n in enumerate(names) if n in flags]
         if not idx:
             raise ValueError(f"no cloud flag bands among {list(band_names)}")
     else:

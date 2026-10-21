@@ -2,7 +2,7 @@ name: train
 on:
   workflow_dispatch:
     inputs:
-      version: {description: "model version, e.g. v2", required: true}
+      version: {description: "model version, e.g. v1", required: true}
       promote: {description: "promote if every gate passes", type: boolean, default: false}
 permissions: {id-token: write, contents: read}
 jobs:
@@ -20,6 +20,8 @@ jobs:
         env: {S3_BUCKET: "${{ secrets.S3_BUCKET }}", S3_REGION: us-west-2}
         run: |
           mkdir -p raw && aws s3 sync s3://$S3_BUCKET/gold/training/raw/ raw/
+          aws s3 sync s3://$S3_BUCKET/gold/training/real_scenes/ training/artifacts/data/real_scenes/
+          test -n "$(ls training/artifacts/data/real_scenes/*.npz 2>/dev/null)" || { echo "no harvested EMIT scenes in the lake"; exit 1; }
           cd training
           python -m datagen --out artifacts/data --data-root ../raw
           python -m train --version ${{ inputs.version }} --out artifacts/models

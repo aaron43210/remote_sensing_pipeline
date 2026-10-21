@@ -7,7 +7,7 @@ import pytest
 from hydra import spec
 from hydra.features import agri
 
-MODEL = Path(__file__).parents[3] / "training" / "artifacts" / "models" / "v1" / "hydra.onnx"
+MODEL = Path(__file__).parents[3] / "training" / "artifacts" / "models" / "v1" / "hydra.onnx"   # the deployed version
 
 
 def test_agri_interpolates_exact_wavelengths():
