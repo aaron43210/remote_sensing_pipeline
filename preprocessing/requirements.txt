@@ -10,9 +10,9 @@ zarr==2.17.2
 # zarr's codecs. Unpinned, pip picks 0.16, which is far newer than zarr 2.17.
 numcodecs==0.12.1
 # Reads/writes Zarr on MinIO or S3 directly, no local download.
-s3fs==2024.6.1
+s3fs==2026.6.0
 # Landsat GeoTIFFs (thermal/)
 rasterio==1.4.4
 # Kafka
-kafka-python==2.0.2
-msgpack==1.0.8
+kafka-python==2.3.2
+msgpack==1.2.1
