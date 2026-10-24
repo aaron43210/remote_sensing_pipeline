@@ -20,14 +20,16 @@ from hs_common.kafka import NoData, Permanent
 from hs_common.sources import emit
 from hs_common.storage import keys
 
+import earthdata
+
 log = logging.getLogger(__name__)
 LOCK_TTL_S = 30 * 60
 FILL = -9999.0
 _redis = redis.Redis.from_url(settings.redis_url, socket_timeout=10)
 
 
-def _staged_granule(url, granule_id, workdir):
-    """Local path to the granule; download from NASA at most once per granule platform-wide."""
+def _staged_granule(url, granule_id, workdir, token=None):
+    """Local path to the granule; download from NASA (with the owner's token) at most once per granule platform-wide."""
     name = url.rsplit("/", 1)[-1]
     key = keys.emit_granule(granule_id, name)
     local = Path(workdir) / name
@@ -38,7 +40,7 @@ def _staged_granule(url, granule_id, workdir):
         try:
             log.info("downloading %s", name)
             t0 = time.time()
-            emit.download(url, local)
+            emit.download(url, local, token)
             storage.put_file(key, local)
             log.info("staged %s (%.0f MB, %.0fs)", name, local.stat().st_size / 1e6, time.time() - t0)
             return local
@@ -50,7 +52,7 @@ def _staged_granule(url, granule_id, workdir):
         if storage.exists(key):
             return storage.get_file(key, local)
         if not _redis.exists(lock):
-            return _staged_granule(url, granule_id, workdir)
+            return _staged_granule(url, granule_id, workdir, token)
     raise TimeoutError(f"granule {granule_id} was not staged within {LOCK_TTL_S}s")
 
 
@@ -111,13 +113,14 @@ def fetch_nasa(req, workdir):
     g = granules[0]
     if not g["url"]:
         raise Permanent(f"granule {g['granule_id']} has no download URL")
-    nc = _staged_granule(g["url"], g["granule_id"], workdir)
+    token = earthdata.token_for(req["job_id"])
+    nc = _staged_granule(g["url"], g["granule_id"], workdir, token)
     cube, wl, good, georef = emit.ortho_crop(nc, req["bbox"])
     os.remove(nc)
     cloud = None
     mask_url = _mask_url(g)
     if mask_url:
-        mnc = _staged_granule(mask_url, g["granule_id"] + "_MASK", workdir)
+        mnc = _staged_granule(mask_url, g["granule_id"] + "_MASK", workdir, token)
         mcube, mnames, _, mgeo = emit.ortho_crop(mnc, req["bbox"], var="mask")
         if mcube.shape[:2] == cube.shape[:2]:
             cloud = emit.cloud_from_mask(mcube, mnames)

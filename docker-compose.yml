@@ -149,6 +149,7 @@ services:
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-}
       JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET (openssl rand -hex 32)}
       JWT_PREVIOUS_SECRET: ${JWT_PREVIOUS_SECRET:-}
+      CREDENTIALS_KEY: ${CREDENTIALS_KEY:?set CREDENTIALS_KEY (openssl rand -hex 32)}
       ACCESS_TTL_MIN: ${ACCESS_TTL_MIN:-15}
       REFRESH_TTL_DAYS: ${REFRESH_TTL_DAYS:-14}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
@@ -197,6 +198,7 @@ services:
       <<: *python-env
       SERVICE_NAME: ingestion
       EMIT_MAX_CLOUD: ${EMIT_MAX_CLOUD:-40}
+      CREDENTIALS_KEY: ${CREDENTIALS_KEY:-}     # opens the job owner's NASA token handed over by the gateway
       EARTHDATA_TOKEN: ${EARTHDATA_TOKEN:-}
       EARTHDATA_USERNAME: ${EARTHDATA_USERNAME:-}
       EARTHDATA_PASSWORD: ${EARTHDATA_PASSWORD:-}

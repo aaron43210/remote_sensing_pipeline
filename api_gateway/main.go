@@ -22,6 +22,7 @@ import (
 	"remote_sensing_production/pkg/kafkax"
 	"remote_sensing_production/pkg/obs"
 	"remote_sensing_production/pkg/s3x"
+	"remote_sensing_production/pkg/secretbox"
 )
 
 func main() {
@@ -36,6 +37,11 @@ func main() {
 	cfg := config.Load()
 	if len(cfg.JWTSecret) < 32 {
 		slog.Error("JWT_SECRET must be at least 32 characters (openssl rand -hex 32)")
+		os.Exit(1)
+	}
+	box, err := secretbox.New(cfg.CredentialsKey)
+	if err != nil {
+		slog.Error(err.Error())
 		os.Exit(1)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
@@ -73,7 +79,7 @@ func main() {
 		os.Exit(1)
 	}
 	srv := &handlers.Server{Cfg: cfg, DB: pool, Redis: rdb, S3: store,
-		Keys: middleware.NewKeyRing(cfg.JWTSecret, cfg.JWTPreviousSecret)}
+		Keys: middleware.NewKeyRing(cfg.JWTSecret, cfg.JWTPreviousSecret), Box: box}
 	httpSrv := &http.Server{
 		Addr: ":" + cfg.Port, Handler: srv.Routes(),
 		ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 30 * time.Second,

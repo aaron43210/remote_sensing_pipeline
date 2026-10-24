@@ -42,7 +42,9 @@ def ok(cond, msg):
 with sync_playwright() as p:
     browser = p.chromium.launch()
     page = browser.new_page(viewport={"width": 1440, "height": 900})
-    page.on("console", lambda m: m.type == "error" and errors.append(m.text))
+    # the bad-token check below answers 400 on purpose: that one is expected, not a page error
+    page.on("console", lambda m: m.type == "error" and not m.location.get("url", "").endswith("/api/me/earthdata")
+            and errors.append(m.text))
     page.on("pageerror", lambda e: errors.append(str(e)))
 
     page.goto(f"{BASE}/")
@@ -57,6 +59,22 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Make maps for an area")).to_be_visible()
     ok(True, "registered and landed on the workspace")
     page.screenshot(path=f"{SHOTS}/1-workspace.png")
+
+    # NASA Earthdata: Minerals/Agriculture ask for the user's own token first
+    minerals, thermal = (page.get_by_role("checkbox", name=n) for n in ("Minerals", "Thermal"))
+    ok(thermal.is_checked() and not minerals.is_checked(), "only Thermal ticked until NASA is connected")
+    minerals.click()
+    nasa = page.get_by_role("dialog", name="Connect your NASA account")
+    expect(nasa).to_be_visible()
+    ok(not minerals.is_checked(), "ticking Minerals opens the NASA popup instead")
+    nasa.get_by_label("Earthdata token").fill("not-a-real-token")
+    nasa.get_by_role("button", name="Submit").click()
+    expect(nasa.get_by_role("alert")).to_be_visible(timeout=30000)
+    ok(True, f"a bad token is refused in the popup: {nasa.get_by_role('alert').inner_text()!r}")
+    page.screenshot(path=f"{SHOTS}/1b-nasa-popup.png")
+    nasa.get_by_role("button", name="Temperature results only").click()
+    expect(nasa).to_be_hidden()
+    ok(thermal.is_checked() and not minerals.is_checked(), "'Temperature results only' keeps Thermal alone")
 
     bbox = [-119.84, 36.71, -119.79, 36.76]
     page.get_by_role("button", name="Enter coordinates").click()

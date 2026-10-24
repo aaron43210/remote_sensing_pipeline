@@ -143,7 +143,7 @@ func (s *Server) activeModel(ctx context.Context) string {
 // travel with the request so ingestion still works while NASA's search is down.
 // Best effort: an empty catalog or a query error just means no fallback.
 func (s *Server) emitCandidates(ctx context.Context, req createJob) []contracts.EmitCandidate {
-	if req.Source != "nasa" || !(contains(req.Tasks, "agriculture") || contains(req.Tasks, "mineral")) {
+	if !needsEMIT(req) {
 		return nil
 	}
 	to := time.Now().UTC()
@@ -174,6 +174,11 @@ func (s *Server) emitCandidates(ctx context.Context, req createJob) []contracts.
 		}
 	}
 	return out
+}
+
+// needsEMIT: the job maps agriculture or minerals from real NASA EMIT imagery.
+func needsEMIT(req createJob) bool {
+	return req.Source == "nasa" && (contains(req.Tasks, "agriculture") || contains(req.Tasks, "mineral"))
 }
 
 func contains(xs []string, x string) bool {
@@ -310,6 +315,15 @@ func (s *Server) CreateJob(c *gin.Context) {
 	case reusedFrom != "":
 		obs.JobsSubmitted.WithLabelValues("coalesced").Inc() // the orchestrator copies results when the original finishes
 	default:
+		if needsEMIT(req) { // reused and attached jobs download nothing, so they need no token
+			if err := s.handOverEarthdata(ctx, uid, jobID); errors.Is(err, errNoEarthdata) {
+				c.AbortWithStatusJSON(http.StatusBadRequest, gin.H{"error": err.Error(), "code": "earthdata_required"})
+				return
+			} else if err != nil {
+				fail(c, http.StatusInternalServerError, "could not use your NASA Earthdata connection")
+				return
+			}
+		}
 		msg := contracts.IngestRequest{SchemaVersion: contracts.SchemaVersion, EventID: uuid.NewString(),
 			JobID: jobID, TS: time.Now().UTC().Format(time.RFC3339Nano), UserID: user, BBox: b,
 			Tasks: req.Tasks, DateFrom: req.DateFrom, DateTo: req.DateTo, Source: req.Source,

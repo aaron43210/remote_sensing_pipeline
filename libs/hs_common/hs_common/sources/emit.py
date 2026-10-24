@@ -11,7 +11,8 @@ says which swath pixel lands there (0 = none). We crop that grid to the bbox
 and read only the swath rows it needs, so the output is a georeferenced cube
 of the user's box, exactly like NASA's own emit_tools ortho output.
 
-Authentication: EARTHDATA_TOKEN (bearer) or EARTHDATA_USERNAME/PASSWORD.
+Authentication: the job owner's Earthdata token (download(..., token)); without
+one, the platform's EARTHDATA_TOKEN (bearer) or EARTHDATA_USERNAME/PASSWORD.
 """
 
 import logging
@@ -149,25 +150,26 @@ def mask_granule_for(granule):
     return best[1] if best else None
 
 
-def _session():
+def _session(token=None):
     s = requests.Session()
-    token = os.getenv("EARTHDATA_TOKEN") or os.getenv("NASA_EARTHDATA_TOKEN")
+    token = token or os.getenv("EARTHDATA_TOKEN") or os.getenv("NASA_EARTHDATA_TOKEN")
     if token:
         s.headers["Authorization"] = f"Bearer {token}"
     elif os.getenv("EARTHDATA_USERNAME"):
         s.auth = (os.environ["EARTHDATA_USERNAME"], os.environ["EARTHDATA_PASSWORD"])
     else:
-        raise PermissionError("EMIT download needs EARTHDATA_TOKEN or EARTHDATA_USERNAME/PASSWORD")
+        raise PermissionError("EMIT download needs a NASA Earthdata token; connect your NASA account")
     return s
 
 
-def download(url, dest):
+def download(url, dest, token=None):
     """Stream a granule to dest (resumable by re-running; partial file is replaced)."""
     dest = Path(dest)
     tmp = dest.with_suffix(dest.suffix + ".part")
-    with _session().get(url, stream=True, timeout=(30, 600), allow_redirects=True) as r:
+    with _session(token).get(url, stream=True, timeout=(30, 600), allow_redirects=True) as r:
         if r.status_code in (401, 403):
-            raise PermissionError(f"Earthdata refused the download ({r.status_code}); check the token")
+            raise PermissionError(f"Earthdata refused the download ({r.status_code}); "
+                                  "the NASA token is invalid or expired, connect a new one")
         r.raise_for_status()
         with open(tmp, "wb") as f:
             for chunk in r.iter_content(chunk_size=8 * 1024 * 1024):

@@ -85,7 +85,7 @@ jobs:
       - name: up (fixture scenes, MinIO)
         run: |
           cp .env.example .env
-          sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/; s/^DB_PASSWORD=.*/DB_PASSWORD=ci$(openssl rand -hex 8)/; \
+          sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/; s/^CREDENTIALS_KEY=.*/CREDENTIALS_KEY=$(openssl rand -hex 32)/; s/^DB_PASSWORD=.*/DB_PASSWORD=ci$(openssl rand -hex 8)/; \
                   s/^AWS_ACCESS_KEY_ID=.*/AWS_ACCESS_KEY_ID=ciminio$(openssl rand -hex 4)/; s/^AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=$(openssl rand -hex 20)/; s/^ALLOW_FIXTURES=.*/ALLOW_FIXTURES=true/" .env
           pip install -c constraints.txt "./libs/hs_common[geo]" "./libs/hydra[training]" pandas "torch==2.5.1" --extra-index-url https://download.pytorch.org/whl/cpu
           cd training && python -m datagen --out artifacts/data --mineral-coverage 20000 --agri-lut 20000 --agri-train 20000 --thermal-scenes 60 \

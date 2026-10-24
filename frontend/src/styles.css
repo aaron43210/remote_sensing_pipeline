@@ -165,6 +165,17 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
 .inspector { position: absolute; bottom: 16px; right: 16px; z-index: 500; width: 300px; max-height: 50%;
   overflow: auto; }
 
+/* Popup: native <dialog>, so Esc, focus trapping and the backdrop come from the browser */
+.dialog { width: min(440px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--surface-1); color: var(--text-primary); box-shadow: var(--shadow); }
+.dialog::backdrop { background: rgba(11, 11, 11, 0.45); }
+.dialog-body { padding: 18px; display: flex; flex-direction: column; gap: 10px; }
+.dialog-body p, .dialog-body h2 { margin: 0; }
+.dialog-body a svg { vertical-align: -1px; }
+/* a button that reads as a link (inline actions in a sentence) */
+.link { background: none; border: 0; padding: 0; font: inherit; color: var(--accent); cursor: pointer; }
+.link:hover { text-decoration: underline; }
+
 /* Auth */
 .auth { min-height: 100%; display: grid; place-items: center; padding: 20px; }
 .auth .card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; padding: 22px; }

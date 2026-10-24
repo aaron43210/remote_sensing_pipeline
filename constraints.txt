@@ -19,6 +19,7 @@ pydantic==2.9.2
 redis==5.0.8
 prometheus-client==0.20.0
 requests==2.33.0
+cryptography==50.0.2
 netCDF4==1.7.1.post2
 pyarrow==23.0.1
 prosail==2.0.5

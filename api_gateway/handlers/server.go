@@ -14,6 +14,7 @@ import (
 	"remote_sensing_production/api_gateway/middleware"
 	"remote_sensing_production/pkg/config"
 	"remote_sensing_production/pkg/s3x"
+	"remote_sensing_production/pkg/secretbox"
 )
 
 type Server struct {
@@ -22,6 +23,7 @@ type Server struct {
 	Redis *redis.Client
 	S3    *s3x.Store
 	Keys  *middleware.KeyRing
+	Box   *secretbox.Box // users' NASA Earthdata tokens, encrypted at rest
 }
 
 func (s *Server) Routes() *gin.Engine {
@@ -53,6 +55,9 @@ func (s *Server) Routes() *gin.Engine {
 	priv := api.Group("")
 	priv.Use(middleware.JWT(s.Keys, s.Redis), middleware.RateLimit(s.Redis, "api", s.Cfg.RateLimitPerMinute, middleware.ByUser))
 	priv.GET("/me", s.Me)
+	priv.GET("/me/earthdata", s.EarthdataStatus)
+	priv.POST("/me/earthdata", s.ConnectEarthdata)
+	priv.DELETE("/me/earthdata", s.DisconnectEarthdata)
 	priv.POST("/auth/logout-all", s.LogoutAll)
 	priv.POST("/jobs/:id/stream-ticket", s.StreamTicket)
 	priv.POST("/jobs", s.CreateJob)
