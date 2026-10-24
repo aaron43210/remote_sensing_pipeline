@@ -6,7 +6,7 @@ COPY constraints.txt /tmp/constraints.txt
 COPY libs/ /tmp/libs/
 RUN apt-get update && apt-get install -y --no-install-recommends build-essential libexpat1 \
     && pip install --prefer-binary -c /tmp/constraints.txt "/tmp/libs/hs_common[geo]" /tmp/libs/hydra \
-        netCDF4 zarr numcodecs s3fs prosail requests \
+        netCDF4 zarr numcodecs s3fs prosail requests cryptography \
     && rm -rf /tmp/libs \
     && apt-get purge -y build-essential && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 COPY ingestion/*.py ./

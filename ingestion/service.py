@@ -16,6 +16,7 @@ from hs_common.config import settings
 from hs_common.kafka import NoData, Permanent, Worker, publish
 from hs_common.messages import IngestRequest, RawHyperspectral, RawThermal
 
+import earthdata
 import hyperspectral
 import thermal
 
@@ -61,6 +62,7 @@ def handle(topic, raw):
         branches.append(("Landsat", thermal.run, "thermal"))
     with ThreadPoolExecutor(max_workers=len(branches)) as ex:
         list(ex.map(lambda b: _branch(b[0], b[1], req, b[2]), branches))
+    earthdata.forget(req["job_id"])                 # downloads are over: drop the owner's token
 
 
 def main():

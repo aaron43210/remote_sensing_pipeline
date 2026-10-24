@@ -22,12 +22,14 @@ which runs in CI against the full stack.
 | Injection | Parameterised SQL everywhere (pgx), strict request validation (bbox numbers, task enum, dates), JSON only | SQL-string tests |
 | XSS / clickjacking / sniffing | React escaping; strict CSP (`script-src 'self'`, no inline/eval, explicit image/connect origins, `frame-ancestors 'none'`), `X-Frame-Options: DENY`, `nosniff`, COOP, Permissions-Policy, HSTS | header tests + browser test with CSP on |
 | Oversized / abusive requests | 64 KB body cap, nginx 30 req/s per IP with burst, per-user API limit, admission control (3 active jobs per user, 500 global) | 413 test, load tests |
+| Leaking users' NASA Earthdata tokens | AES-256-GCM with `CREDENTIALS_KEY`, each value bound to its user (or job), so a copied ciphertext does not open elsewhere; never returned by the API, never in Kafka, logs or job status; handed to ingestion per job through Redis, expiring at the ingest deadline and deleted after the download; tried on a real EMIT file before saving and only ever sent to `*.nasa.gov` | `pkg/secretbox` and `handlers/earthdata_test.go` unit tests |
 | Data exposure in storage | Bucket blocks public access, SSE-encrypted; maps reach browsers only through **15-minute presigned URLs** | e2e |
 | Compromised container | Non-root users, `no-new-privileges`, all Linux capabilities dropped, read-only root filesystems for the Go services, distroless images, internal services not published (only nginx and MinIO's S3 port) | compose |
 | Vulnerable dependencies / leaked secrets | CI: `govulncheck`, `pip-audit`, `npm audit`, Trivy image scan (critical), gitleaks | CI `security` job |
 
 Every authentication event (`login_ok`, `login_fail`, `login_locked`, `register`,
-`refresh_reuse_detected`, `logout`, `logout_all`) is recorded in `audit_log`
+`refresh_reuse_detected`, `logout`, `logout_all`, and for NASA accounts `earthdata_connect`,
+`earthdata_refused`, `earthdata_disconnect`) is recorded in `audit_log`
 with time, user, IP and user agent.
 
 ## Operating it
@@ -36,6 +38,10 @@ with time, user, IP and user agent.
 1. Set `JWT_PREVIOUS_SECRET` to the current `JWT_SECRET`, and `JWT_SECRET` to a new value (`openssl rand -hex 32`).
 2. Restart the gateway. Old tokens still verify (their `kid` points at the previous key); new ones use the new key.
 3. After 15 minutes (the access-token lifetime) remove `JWT_PREVIOUS_SECRET`.
+
+**Rotate `CREDENTIALS_KEY`:** stored NASA tokens cannot be re-read with a new key, so run
+`DELETE FROM earthdata_tokens;`, set the new key and restart the gateway and ingestion. Each user is asked
+for their token again the next time they choose Minerals or Agriculture.
 
 **Respond to a compromised account:** `UPDATE users SET token_version = token_version + 1 WHERE email = '…'`,
 revoke its refresh tokens (`UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = …`), then

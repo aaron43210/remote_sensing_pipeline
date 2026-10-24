@@ -25,6 +25,7 @@ type Config struct {
 
 	JWTSecret         string        // current signing key
 	JWTPreviousSecret string        // accepted for verification only, during key rotation
+	CredentialsKey    string        // AES-256 key (64 hex) for users' NASA Earthdata tokens
 	AccessTTL         time.Duration // short: a stolen access token is useless quickly
 	RefreshTTL        time.Duration
 	CookieSecure      bool   // Secure cookies (true behind HTTPS / CloudFront)
@@ -106,6 +107,7 @@ func Load() Config {
 
 		JWTSecret:         Get("JWT_SECRET", ""),
 		JWTPreviousSecret: Get("JWT_PREVIOUS_SECRET", ""),
+		CredentialsKey:    Get("CREDENTIALS_KEY", ""),
 		AccessTTL:         time.Duration(GetInt("ACCESS_TTL_MIN", 15)) * time.Minute,
 		RefreshTTL:        time.Duration(GetInt("REFRESH_TTL_DAYS", 14)) * 24 * time.Hour,
 		CookieSecure:      GetBool("COOKIE_SECURE", false),

@@ -78,6 +78,9 @@ export const api = {
   logout: () => raw('POST', '/auth/logout', { headers: { ...CSRF, ...(session ? { Authorization: `Bearer ${session.token}` } : {}) } }),
   streamTicket: (id) => request('POST', `/jobs/${encodeURIComponent(id)}/stream-ticket`),
   me: () => request('GET', '/me'),
+  earthdata: () => request('GET', '/me/earthdata'),
+  connectEarthdata: (token) => request('POST', '/me/earthdata', { body: { token } }),
+  disconnectEarthdata: () => request('DELETE', '/me/earthdata'),
   createJob: (payload, idempotencyKey) =>
     request('POST', '/jobs', { body: payload, headers: { 'Idempotency-Key': idempotencyKey } }),
   jobs: (before) => request('GET', `/jobs?limit=20${before ? `&before=${encodeURIComponent(before)}` : ''}`),

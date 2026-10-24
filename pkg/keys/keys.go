@@ -12,3 +12,4 @@ func Rate(scope, who string, minute int64) string {
 	return fmt.Sprintf("rl:%s:%s:%d", scope, who, minute)
 }
 func Cancelled(id string) string { return "cancelled:" + id } // read by the Python workers
+func Earthdata(id string) string { return "earthdata:" + id } // owner's NASA token for ingestion, sealed for this job

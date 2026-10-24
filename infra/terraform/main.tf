@@ -91,10 +91,14 @@ resource "random_password" "admin" {
   length  = 20
   special = false
 }
+resource "random_id" "credentials" { # AES-256 key for users' NASA tokens: 64 hex characters
+  byte_length = 32
+}
 
 resource "aws_ssm_parameter" "secret" {
   for_each = {
     JWT_SECRET      = random_password.jwt.result
+    CREDENTIALS_KEY = random_id.credentials.hex
     DB_PASSWORD     = random_password.db.result
     ADMIN_PASSWORD  = random_password.admin.result
     EARTHDATA_TOKEN = var.earthdata_token == "" ? "unset" : var.earthdata_token
