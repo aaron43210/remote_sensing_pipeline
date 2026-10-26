@@ -22,7 +22,34 @@ export function setSession(s) { session = s; onSessionChange(s) }
 
 const CSRF = { 'X-Requested-With': 'hydranet' }
 
+// Demo build (VITE_DEMO=1, the Hugging Face Space): no server, no sign-in. Read-only
+// answers come from precomputed files of real finished jobs under /demo/
+// (made by scripts/export_demo.py); anything that would start work is refused.
+export const DEMO = import.meta.env.VITE_DEMO === '1'
+export const DEMO_NOTE = 'This is the read-only demo: it shows maps already made from real NASA scenes. ' +
+  'Making new maps needs the full platform.'
+const DEMO_USER = { id: 0, email: 'demo@hydranet', name: 'Demo visitor', role: 'user' }
+
+async function demoFetch(method, path) {
+  const json = (status, data) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } })
+  const file = async (name) => {
+    const r = await fetch(`${import.meta.env.BASE_URL}demo/${name}`)
+    return r.ok ? json(200, await r.json()) : json(404, { error: 'Not part of the demo.' })
+  }
+  const p = path.split('?')[0]
+  if (p === '/auth/refresh') return json(200, { token: 'demo', expires_at: 4102444800, user: DEMO_USER })
+  if (p === '/auth/logout') return new Response(null, { status: 204 })
+  if (method !== 'GET') return json(403, { error: DEMO_NOTE })
+  if (p === '/config' || p === '/model' || p === '/coverage' || p === '/jobs') return file(`${p.slice(1)}.json`)
+  const m = p.match(/^\/jobs\/([\w-]+)(\/layers)?$/)
+  if (m) return file(`jobs/${m[1]}${m[2] ? '.layers' : ''}.json`)
+  if (p === '/me') return json(200, DEMO_USER)
+  if (p === '/me/earthdata') return json(200, { connected: false })
+  return json(403, { error: DEMO_NOTE })
+}
+
 async function raw(method, path, { body, headers = {}, signal } = {}) {
+  if (DEMO) return demoFetch(method, path)
   const h = { Accept: 'application/json', ...headers }
   if (body !== undefined) h['Content-Type'] = 'application/json'
   try {
@@ -73,8 +100,6 @@ async function request(method, path, { body, headers = {}, auth = true, signal }
 export const api = {
   config: () => request('GET', '/config', { auth: false }),
   model: () => request('GET', '/model', { auth: false }),
-  login: (email, password) => request('POST', '/auth/login', { body: { email, password }, auth: false }),
-  register: (email, password, name) => request('POST', '/auth/register', { body: { email, password, name }, auth: false }),
   logout: () => raw('POST', '/auth/logout', { headers: { ...CSRF, ...(session ? { Authorization: `Bearer ${session.token}` } : {}) } }),
   streamTicket: (id) => request('POST', `/jobs/${encodeURIComponent(id)}/stream-ticket`),
   me: () => request('GET', '/me'),

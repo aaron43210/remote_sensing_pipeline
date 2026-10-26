@@ -52,10 +52,6 @@ class keys:
         return f"gold/results/{job_id}/manifest.json"
 
     @staticmethod
-    def stac_item(job_id):
-        return f"gold/results/{job_id}/stac_item.json"
-
-    @staticmethod
     def table(name, date, part):
         return f"gold/tables/{name}/dt={date}/{part}.parquet"
 

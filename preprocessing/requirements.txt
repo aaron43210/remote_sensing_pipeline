@@ -14,5 +14,3 @@ s3fs==2026.6.0
 # Landsat GeoTIFFs (thermal/)
 rasterio==1.4.4
 # Kafka
-kafka-python==2.3.2
-msgpack==1.2.1

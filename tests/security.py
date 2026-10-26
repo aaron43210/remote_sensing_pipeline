@@ -19,6 +19,8 @@ import time
 
 import requests
 
+from oidc_login import authorize, finish, login, start
+
 failures = []
 
 
@@ -58,12 +60,15 @@ def main():
     J = {"Content-Type": "application/json"}
     CSRF = {"X-Requested-With": "hydranet"}
 
+    base = a.base.rstrip("/")
+
     def register(sess=None):
-        s = sess or requests.Session()
         email = f"sec-{secrets.token_hex(4)}@example.com"
-        r = s.post(f"{B}/auth/register", json={"email": email, "password": "Sec-test-passphrase-9", "name": "sec"})
-        assert r.status_code == 201, r.text
-        return s, email, r.json()["token"], r.json()["user"]["id"]
+        s, token, user = login(base, email, sess)
+        return s, email, token, user["id"]
+
+    def error_of(r):
+        return r.headers.get("Location", "").partition("error=")[2]
 
     print("== security headers")
     for path in ("/", "/api/config", "/assets/", "/jobs/x"):
@@ -75,26 +80,56 @@ def main():
     ok("max-age" in h.get("Strict-Transport-Security", ""), "HSTS header")
     ok("script-src 'self'" in h.get("Content-Security-Policy", ""), "CSP forbids inline/foreign scripts")
 
-    print("== passwords")
-    for pw, why in [("short1", "too short"), ("password123", "common"), ("aaaaaaaaaaaa", "one character"),
-                    ("x" * 80, "over bcrypt's 72 bytes")]:
-        r = requests.post(f"{B}/auth/register", json={"email": f"pw-{secrets.token_hex(3)}@example.com", "password": pw})
-        ok(r.status_code == 400, f"rejects {why} password ({r.status_code}: {r.json().get('error')})")
+    print("== Google sign-in (the only way in)")
+    for path in ("/auth/login", "/auth/register"):
+        r = requests.post(f"{B}{path}", json={"email": "x@example.com", "password": "whatever-123"})
+        ok(r.status_code == 404, f"no password endpoint: POST {path} -> {r.status_code}")
+    s0, url = start(base)
+    c = next(c for c in s0.cookies if c.name == "hn_oauth")
+    ok("httponly" in str(c._rest).lower(), "sign-in state cookie is HttpOnly")
+    ok((c._rest.get("SameSite") or c._rest.get("samesite")) == "Lax", "sign-in state cookie is SameSite=Lax")
+    ok("code_challenge_method=S256" in url and "nonce=" in url and "state=" in url, "PKCE (S256), nonce and state are sent")
 
-    print("== brute force: per-account lockout (even from many 'IPs')")
-    s, email, tok, uid = register()
-    codes = [requests.post(f"{B}/auth/login", json={"email": email, "password": f"wrong-guess-{i}"},
-                           headers={"X-Forwarded-For": f"10.1.{i}.{i}", "X-Real-IP": f"10.2.{i}.{i}"}).status_code
-             for i in range(12)]
-    ok(429 in codes, f"account locked after repeated failures {codes}")
-    r = requests.post(f"{B}/auth/login", json={"email": email, "password": "Sec-test-passphrase-9"})
-    ok(r.status_code == 429, "even the right password is refused while locked")
+    s1, url = start(base)
+    cb = authorize(url, f"sec-{secrets.token_hex(3)}@example.com")
+    r = finish(requests.Session(), cb)
+    ok(error_of(r) == "expired", f"callback without the browser's state cookie refused (login CSRF): {error_of(r)!r}")
+    s1, url = start(base)
+    cb = authorize(url, f"sec-{secrets.token_hex(3)}@example.com")
+    r = finish(s1, cb.replace("state=", "state=x"))
+    ok(error_of(r) == "state", f"tampered state refused: {error_of(r)!r}")
+    s1, url = start(base)
+    cb = authorize(url, f"sec-{secrets.token_hex(3)}@example.com")
+    state_cookie = s1.cookies.get("hn_oauth")
+    ok(finish(s1, cb).status_code == 303, "a genuine callback signs in")
+    s1.cookies.set("hn_oauth", state_cookie, path="/api/auth/google")
+    r = finish(s1, cb)
+    ok(error_of(r) == "expired", f"replayed callback refused (state is single-use): {error_of(r)!r}")
+    s1, url = start(base)
+    r = finish(s1, authorize(url, f"sec-{secrets.token_hex(3)}@example.com").replace("code=", "code=forged"))
+    ok(error_of(r) == "failed", f"forged authorization code refused: {error_of(r)!r}")
+    s1, url = start(base)
+    r = finish(s1, authorize(url, f"sec-{secrets.token_hex(3)}@example.com", {"verified": "false"}))
+    ok(error_of(r) == "unverified", f"unverified Google email refused: {error_of(r)!r}")
+    s1, url = start(base)
+    r = finish(s1, authorize(url, f"stranger-{secrets.token_hex(3)}@not-allowed.org"))
+    ok(error_of(r) == "not_allowed", f"account outside the allow list refused: {error_of(r)!r}")
+    s1, url = start(base)
+    r = finish(s1, authorize(url, f"sec-{secrets.token_hex(3)}@example.com", {"hd": ""}))
+    ok(error_of(r) == "not_allowed", f"allowed domain without Google Workspace proof (hd) refused: {error_of(r)!r}")
+    s1, url = start(base)
+    r = finish(s1, authorize(url, "x@example.com", {"deny": "1"}))
+    ok(error_of(r) == "cancelled", f"user cancelling at Google handled: {error_of(r)!r}")
+    for evil in ("//evil.example", "https://evil.example", "/\\evil.example"):
+        s1, url = start(base, frm=evil)
+        r = finish(s1, authorize(url, f"sec-{secrets.token_hex(3)}@example.com"))
+        ok(r.headers.get("Location") == "/", f"no open redirect after sign-in (from={evil!r} -> {r.headers.get('Location')!r})")
 
     print("== rate limit cannot be dodged with forged client-IP headers")
-    codes = [requests.post(f"{B}/auth/login", json={"email": "nobody-%d@example.com" % i, "password": "whatever-123"},
-                           headers={"X-Forwarded-For": f"10.9.{i}.{i}", "X-Real-IP": f"10.8.{i}.{i}"}).status_code
+    codes = [requests.get(f"{B}/auth/google/login", allow_redirects=False,
+                          headers={"X-Forwarded-For": f"10.9.{i}.{i}", "X-Real-IP": f"10.8.{i}.{i}"}).status_code
              for i in range(30)]
-    ok(429 in codes, f"per-IP limit still applies with spoofed X-Forwarded-For / X-Real-IP (got {sorted(set(codes))})")
+    ok(429 in codes, f"per-IP sign-in limit still applies with spoofed X-Forwarded-For / X-Real-IP (got {sorted(set(codes))})")
     print("  (waiting for the rate-limit window to reset)")
     wait_window()
 
@@ -197,9 +232,10 @@ def main():
         r = requests.get(B + p, headers=A)
         # nginx normalises the path; at worst the SPA's index.html comes back, never a file outside the web root
         ok("root:" not in r.text and r.status_code in (200, 400, 404), f"path traversal {p}: nothing leaked ({r.status_code})")
-    r = requests.post(f"{B}/auth/register", json={"email": f"x-{secrets.token_hex(3)}@example.com",
-                                                   "password": "Sec-test-passphrase-9", "name": "<script>alert(1)</script>"})
+    r = requests.post(f"{B}/jobs", headers=A, json={"bbox": "<script>alert(1)</script>", "tasks": ["<img src=x onerror=1>"]})
     ok(r.headers.get("Content-Type", "").startswith("application/json"), "API answers JSON, never HTML (no reflected XSS)")
+    r = requests.get(f"{base}/login?error=%3Cscript%3Ealert(1)%3C/script%3E")
+    ok("<script>alert(1)" not in r.text, "sign-in error codes are never reflected into the page")
 
     print(f"\n{'PASSED' if not failures else 'FAILED'}: {len(failures)} failure(s)")
     for f in failures:

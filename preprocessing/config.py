@@ -9,23 +9,6 @@ All values can be overridden with environment variables without a rebuild.
 
 import os
 
-# ── Kafka: the contract with ingestion (in) and ml_inference (out) ───────
-KAFKA_SERVERS = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "kafka:29092")
-TOPIC_IN = os.getenv("PREPROC_INPUT_TOPIC", "raw-data")
-TOPIC_OUT = os.getenv("PREPROC_OUTPUT_TOPIC", "preprocessed-multiband")
-CONSUMER_GROUP = "preprocessing-group"
-
-# ── Object storage (MinIO locally, S3 on AWS) ────────────────────────────
-MINIO_ENDPOINT = os.getenv("MINIO_ENDPOINT", "minio:9000")
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minioadmin")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minioadmin")
-# Leave unset locally. On AWS set it to "" so s3fs talks to real S3.
-S3_ENDPOINT_URL = os.getenv("S3_ENDPOINT_URL", f"http://{MINIO_ENDPOINT}")
-BUCKET_IN = os.getenv("PREPROC_BUCKET_IN", "raw-scenes")          # ingestion
-BUCKET_OUT = os.getenv("PREPROC_BUCKET_OUT", "preprocessed-data")  # ml reads
-# ml_inference reads multiband.npy today. Turn off once it reads the Zarr.
-WRITE_NPY = os.getenv("PREPROC_WRITE_NPY", "1") == "1"
-
 # ── Dask chunking ────────────────────────────────────────────────────────
 # Chunks split x/y only; every chunk holds the FULL spectrum, because each
 # step works along one pixel's spectrum. 256 x 256 x 285 x 4 B = ~75 MB.

@@ -23,7 +23,5 @@ cryptography==50.0.2
 netCDF4==1.7.1.post2
 pyarrow==23.0.1
 prosail==2.0.5
-kafka-python==2.3.2
-msgpack==1.2.1
 pytest==9.0.3
 pandas==2.2.3

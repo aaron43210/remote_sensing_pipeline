@@ -1,8 +1,10 @@
 data "aws_caller_identity" "me" {}
 
 locals {
-  bucket   = "hyperspectral-${var.name}-${var.env}"
-  services = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools", "pipelines"]
+  bucket      = "hyperspectral-${var.name}-${var.env}"
+  origin_host = "origin.${var.domain_name}" # CloudFront -> instance, HTTPS (Let's Encrypt on the instance)
+  site_origin = "https://${var.domain_name}"
+  services    = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools", "pipelines"]
 }
 
 # ── Object storage: the data lake (bronze / silver / gold / models) ──────────
@@ -23,11 +25,21 @@ resource "aws_s3_bucket_versioning" "lake" {
   versioning_configuration { status = "Enabled" }
 }
 
+#trivy:ignore:AVD-AWS-0132 SSE-S3 (AES-256) instead of a paid customer-managed KMS key
 resource "aws_s3_bucket_server_side_encryption_configuration" "lake" {
   bucket = aws_s3_bucket.lake.id
   rule {
     apply_server_side_encryption_by_default { sse_algorithm = "AES256" }
   }
+}
+
+# Refuse any request that is not HTTPS
+resource "aws_s3_bucket_policy" "lake_tls_only" {
+  bucket     = aws_s3_bucket.lake.id
+  depends_on = [aws_s3_bucket_public_access_block.lake]
+  policy = jsonencode({ Version = "2012-10-17", Statement = [{ Sid = "TLSOnly", Effect = "Deny", Principal = "*",
+    Action = "s3:*", Resource = [aws_s3_bucket.lake.arn, "${aws_s3_bucket.lake.arn}/*"],
+  Condition = { Bool = { "aws:SecureTransport" = "false" } } }] })
 }
 
 resource "aws_s3_bucket_lifecycle_configuration" "lake" {
@@ -55,7 +67,7 @@ resource "aws_s3_bucket_cors_configuration" "lake" {
   bucket = aws_s3_bucket.lake.id
   cors_rule {
     allowed_methods = ["GET", "HEAD"]
-    allowed_origins = ["https://${aws_cloudfront_distribution.site.domain_name}"]
+    allowed_origins = [local.site_origin]
     allowed_headers = ["Range", "Authorization"]
     expose_headers  = ["Content-Range", "Content-Length", "ETag", "Accept-Ranges"]
     max_age_seconds = 3600
@@ -73,8 +85,8 @@ resource "aws_ecr_repository" "svc" {
 resource "aws_ecr_lifecycle_policy" "svc" {
   for_each   = aws_ecr_repository.svc
   repository = each.value.name
-  policy = jsonencode({ rules = [{ rulePriority = 1, description = "keep 15 images",
-    selection = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 15 },
+  policy = jsonencode({ rules = [{ rulePriority = 1, description = "keep 5 images",
+    selection = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 5 },
   action = { type = "expire" } }] })
 }
 
@@ -87,8 +99,8 @@ resource "random_password" "db" {
   length  = 32
   special = false
 }
-resource "random_password" "admin" {
-  length  = 20
+resource "random_password" "origin" { # CloudFront -> origin shared secret (X-Origin-Verify)
+  length  = 48
   special = false
 }
 resource "random_id" "credentials" { # AES-256 key for users' NASA tokens: 64 hex characters
@@ -100,25 +112,43 @@ resource "aws_ssm_parameter" "secret" {
     JWT_SECRET      = random_password.jwt.result
     CREDENTIALS_KEY = random_id.credentials.hex
     DB_PASSWORD     = random_password.db.result
-    ADMIN_PASSWORD  = random_password.admin.result
-    EARTHDATA_TOKEN = var.earthdata_token == "" ? "unset" : var.earthdata_token
+    ORIGIN_SECRET   = random_password.origin.result
   }
   name  = "/hydranet/${var.env}/${each.key}"
   type  = "SecureString"
   value = each.value
 }
 
+# Values only you have. Terraform creates them as CHANGE_ME and never overwrites them,
+# so they stay out of Terraform state. Set each one (deploy.sh refuses while any is CHANGE_ME):
+#   aws ssm put-parameter --overwrite --type SecureString --name /hydranet/prod/GOOGLE_CLIENT_SECRET --value '...'
+resource "aws_ssm_parameter" "manual" {
+  for_each = {
+    GOOGLE_CLIENT_ID     = "String"
+    GOOGLE_CLIENT_SECRET = "SecureString"
+    EARTHDATA_TOKEN      = "SecureString" # optional: platform NASA token for batch jobs ("unset" = none)
+  }
+  name  = "/hydranet/${var.env}/${each.key}"
+  type  = each.value
+  value = "CHANGE_ME"
+  lifecycle { ignore_changes = [value] }
+}
+
 resource "aws_ssm_parameter" "config" {
   for_each = {
-    S3_BUCKET     = aws_s3_bucket.lake.bucket
-    S3_REGION     = var.region
-    PUBLIC_ORIGIN = "https://${aws_cloudfront_distribution.site.domain_name}"
-    ADMIN_EMAIL   = var.admin_email
-    REGISTRY      = "${data.aws_caller_identity.me.account_id}.dkr.ecr.${var.region}.amazonaws.com"
+    S3_BUCKET             = aws_s3_bucket.lake.bucket
+    S3_REGION             = var.region
+    DOMAIN                = var.domain_name
+    ORIGIN_HOST           = local.origin_host
+    PUBLIC_ORIGIN         = local.site_origin
+    ADMIN_EMAIL           = var.admin_email
+    ALLOWED_EMAILS        = join(",", var.allowed_emails)
+    ALLOWED_EMAIL_DOMAINS = join(",", var.allowed_email_domains)
+    REGISTRY              = "${data.aws_caller_identity.me.account_id}.dkr.ecr.${var.region}.amazonaws.com"
   }
   name  = "/hydranet/${var.env}/${each.key}"
   type  = "String"
-  value = each.value
+  value = each.value == "" ? "-" : each.value # SSM refuses empty values; deploy.sh maps "-" back to empty
 }
 
 # ── Instance role: this bucket, its logs, ECR pulls, SSM (no SSH keys) ───────
@@ -147,9 +177,17 @@ resource "aws_iam_role_policy" "node" {
     Resource = "${aws_s3_bucket.lake.arn}/*" },
     { Effect = "Allow", Action = ["ssm:GetParameter", "ssm:GetParametersByPath"],
     Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/hydranet/${var.env}/*" },
-    { Effect = "Allow", Action = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents", "logs:PutRetentionPolicy"],
-    Resource = "*" },
+    { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"],
+    Resource = "${aws_cloudwatch_log_group.app.arn}:*" },
+    # certbot (scripts/origin_cert.sh): DNS-01 challenge for the origin certificate
+    { Effect = "Allow", Action = ["route53:ListHostedZones", "route53:GetChange"], Resource = "*" },
+    { Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = data.aws_route53_zone.site.arn },
   ] })
+}
+
+resource "aws_cloudwatch_log_group" "app" {
+  name              = "/hydranet/${var.env}"
+  retention_in_days = var.log_retention_days
 }
 
 resource "aws_iam_instance_profile" "node" {
@@ -168,19 +206,21 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
 
 resource "aws_security_group" "node" {
   name        = "hydranet-${var.env}"
-  description = "HTTP from CloudFront only; no SSH (use SSM Session Manager)"
+  description = "HTTPS from CloudFront only; no SSH (use SSM Session Manager)"
   vpc_id      = data.aws_vpc.default.id
   ingress {
-    from_port       = 80
-    to_port         = 80
+    description     = "HTTPS from CloudFront edge locations only"
+    from_port       = 443
+    to_port         = 443
     protocol        = "tcp"
     prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
+  egress { # HTTPS out only: NASA, Google, ECR, S3, SSM, Let's Encrypt, GitHub (DNS/NTP/metadata are link-local)
+    description = "HTTPS to the internet"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"] #trivy:ignore:AVD-AWS-0104 NASA/Google/AWS endpoints have no fixed IP ranges
   }
 }
 
@@ -193,7 +233,9 @@ resource "aws_instance" "node" {
   instance_type          = var.instance_type
   iam_instance_profile   = aws_iam_instance_profile.node.name
   vpc_security_group_ids = [aws_security_group.node.id]
-  user_data              = templatefile("${path.module}/user_data.sh", { env = var.env, region = var.region })
+  user_data = templatefile("${path.module}/user_data.sh", { env = var.env, region = var.region,
+  domain = var.domain_name, origin_host = local.origin_host, le_email = var.alert_email, swap_gb = var.swap_gb })
+  user_data_replace_on_change = false
   metadata_options {
     http_tokens                 = "required"
     http_put_response_hop_limit = 2 # containers reach the instance role through IMDSv2
@@ -203,7 +245,99 @@ resource "aws_instance" "node" {
     volume_type = "gp3"
     encrypted   = true
   }
-  tags = { Name = "hydranet-${var.env}" }
+  tags = { Name = "hydranet-${var.env}", Backup = "daily" }
+  lifecycle { ignore_changes = [ami, user_data] } # a newer AMI must not silently replace the server
+}
+
+# Fixed public address: the instance stops at night, and its automatic IP would change on every start.
+resource "aws_eip" "node" {
+  domain = "vpc"
+  tags   = { Name = "hydranet-${var.env}" }
+}
+
+resource "aws_eip_association" "node" {
+  instance_id   = aws_instance.node.id
+  allocation_id = aws_eip.node.id
+}
+
+# ── DNS + certificates (your domain's hosted zone must already exist in Route 53) ──
+data "aws_route53_zone" "site" {
+  name         = var.route53_zone_name
+  private_zone = false
+}
+
+resource "aws_route53_record" "origin" {
+  zone_id = data.aws_route53_zone.site.zone_id
+  name    = local.origin_host
+  type    = "A"
+  ttl     = 300
+  records = [aws_eip.node.public_ip]
+}
+
+resource "aws_acm_certificate" "site" { # CloudFront certificates must live in us-east-1
+  provider          = aws.us_east_1
+  domain_name       = var.domain_name
+  validation_method = "DNS"
+  lifecycle { create_before_destroy = true }
+}
+
+resource "aws_route53_record" "acm" {
+  for_each = { for o in aws_acm_certificate.site.domain_validation_options : o.domain_name => o }
+  zone_id  = data.aws_route53_zone.site.zone_id
+  name     = each.value.resource_record_name
+  type     = each.value.resource_record_type
+  records  = [each.value.resource_record_value]
+  ttl      = 300
+}
+
+resource "aws_acm_certificate_validation" "site" {
+  provider                = aws.us_east_1
+  certificate_arn         = aws_acm_certificate.site.arn
+  validation_record_fqdns = [for r in aws_route53_record.acm : r.fqdn]
+}
+
+resource "aws_route53_record" "site" {
+  for_each = toset(["A", "AAAA"])
+  zone_id  = data.aws_route53_zone.site.zone_id
+  name     = var.domain_name
+  type     = each.key
+  alias {
+    name                   = aws_cloudfront_distribution.site.domain_name
+    zone_id                = aws_cloudfront_distribution.site.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# ── Daily EBS snapshots (the database lives on this disk), 7 kept ────────────
+resource "aws_iam_role" "dlm" {
+  name = "hydranet-${var.env}-dlm"
+  assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow",
+  Principal = { Service = "dlm.amazonaws.com" }, Action = "sts:AssumeRole" }] })
+}
+
+resource "aws_iam_role_policy_attachment" "dlm" {
+  role       = aws_iam_role.dlm.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole"
+}
+
+resource "aws_dlm_lifecycle_policy" "snapshots" {
+  description        = "hydranet-${var.env} daily snapshots"
+  execution_role_arn = aws_iam_role.dlm.arn
+  state              = "ENABLED"
+  policy_details {
+    resource_types = ["INSTANCE"]
+    target_tags    = { Backup = "daily" }
+    schedule {
+      name      = "daily"
+      copy_tags = true
+      create_rule {
+        interval      = 24
+        interval_unit = "HOURS"
+        times         = ["19:00"] # UTC = noon Pacific, while the instance is running
+      }
+      retain_rule { count = 7 }
+    }
+  }
 }
 
 # ── CloudFront: HTTPS for the site + /api (SSE needs no caching) ─────────────
@@ -225,13 +359,18 @@ resource "aws_cloudfront_distribution" "site" {
   is_ipv6_enabled = true
   comment         = "hydranet-${var.env}"
   price_class     = "PriceClass_100"
+  aliases         = [var.domain_name]
   origin {
-    domain_name = aws_instance.node.public_dns
+    domain_name = local.origin_host
     origin_id   = "node"
+    custom_header {
+      name  = "X-Origin-Verify"
+      value = random_password.origin.result
+    }
     custom_origin_config {
       http_port                = 80
       https_port               = 443
-      origin_protocol_policy   = "http-only"
+      origin_protocol_policy   = "https-only"
       origin_ssl_protocols     = ["TLSv1.2"]
       origin_read_timeout      = 60
       origin_keepalive_timeout = 60
@@ -258,7 +397,71 @@ resource "aws_cloudfront_distribution" "site" {
   restrictions {
     geo_restriction { restriction_type = "none" }
   }
-  viewer_certificate { cloudfront_default_certificate = true }
+  web_acl_id = var.enable_waf ? aws_wafv2_web_acl.site[0].arn : null #trivy:ignore:AVD-AWS-0011 WAF is optional (cost); see enable_waf
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate_validation.site.certificate_arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
+  }
+  depends_on = [aws_route53_record.origin]
+}
+
+# ── Optional WAF in front of CloudFront (~$8-10/month): AWS common rules + per-IP rate limit
+resource "aws_wafv2_web_acl" "site" {
+  count    = var.enable_waf ? 1 : 0
+  provider = aws.us_east_1
+  name     = "hydranet-${var.env}"
+  scope    = "CLOUDFRONT"
+  default_action {
+    allow {}
+  }
+  rule {
+    name     = "aws-common"
+    priority = 1
+    override_action {
+      none {}
+    }
+    statement {
+      managed_rule_group_statement {
+        vendor_name = "AWS"
+        name        = "AWSManagedRulesCommonRuleSet"
+        rule_action_override { # map files and job bodies are legitimately large
+          name = "SizeRestrictions_BODY"
+          action_to_use {
+            count {}
+          }
+        }
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "aws-common"
+      sampled_requests_enabled   = true
+    }
+  }
+  rule {
+    name     = "per-ip-rate"
+    priority = 2
+    action {
+      block {}
+    }
+    statement {
+      rate_based_statement {
+        limit              = 2000 # requests per 5 minutes per IP
+        aggregate_key_type = "IP"
+      }
+    }
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "per-ip-rate"
+      sampled_requests_enabled   = true
+    }
+  }
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "hydranet"
+    sampled_requests_enabled   = true
+  }
 }
 
 # ── Analytics over the lake (Athena + Glue, pay per query) ───────────────────
@@ -296,7 +499,11 @@ resource "aws_glue_catalog_table" "job_facts" {
 resource "aws_athena_workgroup" "lake" {
   name = "hydranet-${var.env}"
   configuration {
-    result_configuration { output_location = "s3://${local.bucket}/ops/athena/" }
+    enforce_workgroup_configuration = true
+    result_configuration {
+      output_location = "s3://${local.bucket}/ops/athena/"
+      encryption_configuration { encryption_option = "SSE_S3" }
+    }
     bytes_scanned_cutoff_per_query = 1073741824 # 1 GB guard rail
   }
 }
@@ -357,7 +564,10 @@ resource "aws_iam_role" "deploy" {
   assume_role_policy = jsonencode({ Version = "2012-10-17", Statement = [{ Effect = "Allow",
     Principal = { Federated = aws_iam_openid_connect_provider.github.arn }, Action = "sts:AssumeRoleWithWebIdentity",
     Condition = { StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" },
-  StringLike = { "token.actions.githubusercontent.com:sub" = "repo:${var.github_repo}:*" } } }] })
+      StringLike = { "token.actions.githubusercontent.com:sub" = [
+        "repo:${var.github_repo}:environment:production", # deploy.yml, train.yml
+        "repo:${var.github_repo}:ref:refs/tags/v*",       # release.yml (image builds)
+  ] } } }] })
 }
 
 resource "aws_iam_role_policy" "deploy" {

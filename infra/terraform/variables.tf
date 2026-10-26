@@ -21,9 +21,9 @@ variable "volume_gb" {
   default = 50
 }
 variable "budget_usd" {
-  description = "Monthly budget; alerts at 25/50/80/100 %"
+  description = "Monthly budget; e-mail alerts at 25/50/80/100 %. About $40/month at the defaults (see README)."
   type        = number
-  default     = 60
+  default     = 45
 }
 variable "alert_email" {
   type = string
@@ -38,11 +38,43 @@ variable "office_hours_only" {
   default     = true
 }
 variable "admin_email" {
-  type = string
-}
-variable "earthdata_token" {
-  description = "NASA Earthdata bearer token (stored in SSM as SecureString)"
+  description = "Google account that becomes admin on first sign-in"
   type        = string
-  sensitive   = true
-  default     = ""
+}
+variable "domain_name" {
+  description = "Site domain, e.g. maps.example.com (required: Google sign-in and HTTPS need a real domain)"
+  type        = string
+  validation {
+    condition     = can(regex("^[a-z0-9.-]+\\.[a-z]{2,}$", var.domain_name))
+    error_message = "Set domain_name to your domain, e.g. maps.example.com."
+  }
+}
+variable "route53_zone_name" {
+  description = "Route 53 public hosted zone that holds domain_name, e.g. example.com"
+  type        = string
+}
+variable "allowed_emails" {
+  description = "Google accounts allowed to sign in (besides admin_email)"
+  type        = list(string)
+  default     = []
+}
+variable "allowed_email_domains" {
+  description = "Google Workspace domains (or gmail.com) whose accounts may sign in"
+  type        = list(string)
+  default     = []
+}
+variable "log_retention_days" {
+  type    = number
+  default = 14
+}
+variable "swap_gb" {
+  description = "Swap file on the instance, so a large scene cannot crash an 8 GB t4g.large"
+  type        = number
+  default     = 4
+}
+
+variable "enable_waf" {
+  description = "AWS WAF in front of CloudFront (common attack rules + per-IP rate limit). About $8-10/month."
+  type        = bool
+  default     = false
 }

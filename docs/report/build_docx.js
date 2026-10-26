@@ -378,7 +378,7 @@ for (const [f, cap] of [["ui_login.png", "Sign-in page."], ["ui_coverage.png", "
 // 14 security, scale, deployment, tests
 C.push(H1("14. Security, scale, deployment and testing"));
 C.push(...T(["Threat", "Control"], [
-  ["Password guessing", "per-IP limit (20/min), per-account lockout (10 → 15 min), bcrypt cost 11, ≥ 10-character passwords"],
+  ["Sign-in", "Google only (OpenID Connect, PKCE, single-use state + nonce), allow list, no passwords stored; per-IP limit (20/min)"],
   ["Fake client IP", "nginx overwrites X-Real-IP with the TCP peer; X-Forwarded-For never trusted"],
   ["Forged or stolen tokens", "HS256 only with key ring; 15-minute access tokens in memory; rotating HttpOnly refresh cookies with reuse detection; single-use stream tickets"],
   ["CSRF, IDOR, injection, XSS", "SameSite=Strict + header + Origin; ownership checks (404); parameterised SQL; strict CSP and headers"],
@@ -386,7 +386,7 @@ C.push(...T(["Threat", "Control"], [
   ["Dependencies, secrets", "govulncheck, pip-audit, npm audit, Trivy, gitleaks in CI; secrets in .env (local) / SSM (AWS)"],
 ], [2, 5.4], "Security (tests/security.py: 63 attacks, none succeed)"));
 C.push(...T(["Load test", "Result"], [
-  ["300 concurrent users (register, submit, poll, layers)", "0 failed of 54,694 requests; API p95 4.1 ms, submit 7.4 ms, layers 5.9 ms"],
+  ["300 concurrent users (sign in, submit, poll, layers)", "0 failed of 54,694 requests; API p95 4.1 ms, submit 7.4 ms, layers 5.9 ms"],
   ["Distinct areas, 4 workers per stage", "3.8 jobs/s (all three maps)"],
 ], [3.2, 4.2], "Load (k6, one laptop)"));
 C.push(...Img("fig_aws.png", 6.3, "AWS deployment (Terraform)."));
@@ -427,7 +427,7 @@ C.push(...Code([
 ]));
 C.push(H2("Appendix A. REST API"));
 C.push(...T(["Method and path", "Purpose"], [
-  ["POST /api/auth/register, /login, /refresh, /logout, /logout-all", "accounts and sessions"],
+  ["GET /api/auth/google/login, /google/callback; POST /refresh, /logout, /logout-all", "Google sign-in and sessions"],
   ["GET /api/me, /api/config, /api/model", "current user; UI limits; active model and its verification"],
   ["GET /api/coverage?date_from&date_to", "EMIT footprints and the covered area for the map"],
   ["POST /api/jobs; GET /api/jobs, /api/jobs/:id; DELETE /api/jobs/:id", "submit (Idempotency-Key), list, status, cancel"],

@@ -9,6 +9,6 @@ export default defineConfig({
     port: 5173,
     proxy: { '/api': { target: process.env.API_TARGET || 'http://localhost:8080', changeOrigin: true } },
   },
-  build: { sourcemap: true, chunkSizeWarningLimit: 900 },
+  build: { sourcemap: false, chunkSizeWarningLimit: 900 },  // no .map files in production: they would publish the source
   test: { environment: 'jsdom', globals: true },
 })

@@ -4,7 +4,7 @@ Browser test of the real UI (headless Chromium, Playwright).
     docker run --rm --network host -v $PWD/tests:/t -v /tmp/shots:/shots \
       mcr.microsoft.com/playwright/python:v1.48.0-jammy python /t/ui_smoke.py http://localhost:3000 /shots
 
-Registers, enters an area, submits a job (synthetic scene via the API, needs
+Signs in with Google (the test IdP: docker compose --profile test), enters an area, submits a job (synthetic scene via the API, needs
 ALLOW_FIXTURES=true), follows the live timeline, then checks the map overlay image actually loaded, the legend and
 chart rendered, every task tab works, mineral highlighting re-renders, and the
 pixel inspector reads values from the COGs. Fails on any browser console error.
@@ -50,14 +50,13 @@ with sync_playwright() as p:
     page.goto(f"{BASE}/")
     expect(page).to_have_url(f"{BASE}/login")
     ok(True, "unauthenticated user is sent to sign in")
-    page.get_by_role("link", name="Create an account").click()
-    page.get_by_label("Name").fill("UI Test")
+    ok(page.get_by_label("Password").count() == 0, "no password form: Google sign-in only")
     email = f"ui-{secrets.token_hex(4)}@example.com"
-    page.get_by_label("Email").fill(email)
-    page.get_by_label("Password").fill("Ui-test-passphrase-7")
-    page.get_by_role("button", name="Create account").click()
-    expect(page.get_by_role("heading", name="Make maps for an area")).to_be_visible()
-    ok(True, "registered and landed on the workspace")
+    # the test IdP signs in whoever login_hint names; a real user picks their Google account here
+    page.route("**/authorize?*", lambda route: route.continue_(url=route.request.url + f"&login_hint={email}"))
+    page.get_by_role("link", name="Sign in with Google").click()
+    expect(page.get_by_role("heading", name="Make maps for an area")).to_be_visible(timeout=20000)
+    ok(True, "signed in with Google and landed on the workspace")
     page.screenshot(path=f"{SHOTS}/1-workspace.png")
 
     # NASA Earthdata: Minerals/Agriculture ask for the user's own token first
@@ -86,8 +85,7 @@ with sync_playwright() as p:
     # The UI only submits real NASA imagery (EMIT needs an Earthdata token), so the
     # job itself is a synthetic scene submitted through the API (ALLOW_FIXTURES=true)
     # for the same user, then followed in the browser like any other job.
-    tok = page.request.post(f"{BASE}/api/auth/login",
-                            data={"email": email, "password": "Ui-test-passphrase-7"}).json()["token"]
+    tok = page.request.post(f"{BASE}/api/auth/refresh", headers={"X-Requested-With": "hydranet"}).json()["token"]
     job = page.request.post(f"{BASE}/api/jobs", headers={"Authorization": f"Bearer {tok}"},
                             data={"bbox": bbox, "tasks": ["agriculture", "mineral", "thermal"], "source": "fixture"})
     ok(job.status == 202, f"fixture job accepted ({job.status})")

@@ -3,7 +3,6 @@ package keys
 
 import "fmt"
 
-func Job(id string) string        { return "job:" + id }        // hash: cached job JSON (24 h)
 func Events(id string) string     { return "events:" + id }     // pub/sub channel for SSE
 func Reuse(hash string) string    { return "reuse:" + hash }    // finished job for an identical request
 func Inflight(hash string) string { return "inflight:" + hash } // running job for an identical request

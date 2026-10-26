@@ -3,11 +3,11 @@ on:
   workflow_dispatch:
     inputs:
       version: {description: "model version, e.g. v1", required: true}
-      promote: {description: "promote if every gate passes", type: boolean, default: false}
 permissions: {id-token: write, contents: read}
 jobs:
   train:
     runs-on: ubuntu-latest
+    environment: production   # the AWS deploy role trusts this environment only
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v4

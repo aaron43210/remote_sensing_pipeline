@@ -5,7 +5,6 @@ package kafkax
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"time"
@@ -24,14 +23,6 @@ func NewWriter(brokers []string) *kafka.Writer {
 		AllowAutoTopicCreation: false,
 		Compression:            kafka.Zstd,
 	}
-}
-
-func PublishJSON(ctx context.Context, w *kafka.Writer, topic, key string, v any) error {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return err
-	}
-	return w.WriteMessages(ctx, kafka.Message{Topic: topic, Key: []byte(key), Value: b})
 }
 
 // Consume runs handler for every message of topic in group until ctx ends.

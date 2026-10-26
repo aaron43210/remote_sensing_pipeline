@@ -3,6 +3,7 @@
 package config
 
 import (
+	"errors"
 	"os"
 	"strconv"
 	"strings"
@@ -31,8 +32,17 @@ type Config struct {
 	CookieSecure      bool   // Secure cookies (true behind HTTPS / CloudFront)
 	ClientIPHeader    string // set by OUR edge proxy only; X-Forwarded-For is never trusted
 	MaxBodyBytes      int64
-	LoginMaxFailures  int // per account, per 15 minutes
 	AllowedOrigins    []string
+
+	// Sign-in: Google (OpenID Connect) only. OIDCIssuer is overridable for the test IdP.
+	OIDCIssuer       string
+	OIDCClientID     string
+	OIDCClientSecret string
+	OIDCRedirectURL  string   // https://<domain>/api/auth/google/callback
+	AllowedEmails    []string // exact addresses allowed to sign in
+	AllowedDomains   []string // Google Workspace domains (checked against the hd claim), or gmail.com
+	OpenSignup       bool     // any verified Google account (off by default: compute costs money)
+	AdminEmail       string   // becomes admin on sign-in
 
 	// Admission control: keeps the platform responsive under load
 	MaxActiveJobsPerUser int
@@ -76,6 +86,17 @@ func GetBool(key string, def bool) bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
+// list splits a comma-separated value, lower-cased, without blanks.
+func list(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		if p = strings.ToLower(strings.TrimSpace(p)); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
 func region(s string) [4]float64 {
 	out := [4]float64{-180, -90, 180, 90}
 	parts := strings.Split(s, ",")
@@ -113,8 +134,16 @@ func Load() Config {
 		CookieSecure:      GetBool("COOKIE_SECURE", false),
 		ClientIPHeader:    Get("CLIENT_IP_HEADER", "X-Real-IP"),
 		MaxBodyBytes:      int64(GetInt("MAX_BODY_BYTES", 64*1024)),
-		LoginMaxFailures:  GetInt("LOGIN_MAX_FAILURES", 10),
 		AllowedOrigins:    strings.Split(Get("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173"), ","),
+
+		OIDCIssuer:       Get("OIDC_ISSUER", "https://accounts.google.com"),
+		OIDCClientID:     Get("GOOGLE_CLIENT_ID", ""),
+		OIDCClientSecret: Get("GOOGLE_CLIENT_SECRET", ""),
+		OIDCRedirectURL:  Get("OAUTH_REDIRECT_URL", "http://localhost:3000/api/auth/google/callback"),
+		AllowedEmails:    list(Get("ALLOWED_EMAILS", "")),
+		AllowedDomains:   list(Get("ALLOWED_EMAIL_DOMAINS", "")),
+		OpenSignup:       GetBool("OPEN_SIGNUP", false),
+		AdminEmail:       strings.ToLower(strings.TrimSpace(Get("ADMIN_EMAIL", ""))),
 
 		MaxActiveJobsPerUser: GetInt("MAX_ACTIVE_JOBS_PER_USER", 3),
 		MaxQueuedJobs:        GetInt("MAX_QUEUED_JOBS", 500),
@@ -132,4 +161,27 @@ func Load() Config {
 			"inference":  time.Duration(GetInt("SLA_INFERENCE_MIN", 10)) * time.Minute,
 		},
 	}
+}
+
+const GoogleIssuer = "https://accounts.google.com"
+
+// CheckSignIn refuses a production start whose sign-in would be unsafe or open to everyone.
+func (c Config) CheckSignIn() error {
+	if c.Env != "prod" {
+		return nil
+	}
+	switch {
+	case c.OIDCClientID == "" || c.OIDCClientSecret == "" ||
+		strings.Contains(c.OIDCClientID, "CHANGE_ME") || strings.Contains(c.OIDCClientSecret, "CHANGE_ME"):
+		return errors.New("GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET must be set (sign-in is Google only)")
+	case c.OIDCIssuer != GoogleIssuer:
+		return errors.New("in production OIDC_ISSUER must be " + GoogleIssuer)
+	case !strings.HasPrefix(c.OIDCRedirectURL, "https://"):
+		return errors.New("OAUTH_REDIRECT_URL must be https:// in production")
+	case !c.CookieSecure:
+		return errors.New("COOKIE_SECURE must be true in production")
+	case !c.OpenSignup && len(c.AllowedEmails) == 0 && len(c.AllowedDomains) == 0 && c.AdminEmail == "":
+		return errors.New("set ALLOWED_EMAILS or ALLOWED_EMAIL_DOMAINS (or OPEN_SIGNUP=true): nobody could sign in")
+	}
+	return nil
 }

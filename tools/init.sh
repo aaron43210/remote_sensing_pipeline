@@ -1,5 +1,5 @@
 #!/bin/bash
-# One-shot platform init (idempotent): storage, admin account, first model.
+# One-shot platform init (idempotent): storage, EMIT coverage, first model. (Admin = ADMIN_EMAIL on Google sign-in.)
 set -euo pipefail
 python scripts/init_storage.py
 # the gateway applies DB migrations; wait until the schema exists
@@ -11,7 +11,6 @@ with psycopg.connect(os.environ["DATABASE_URL"]) as c:
 PY
   echo "waiting for database migrations"; sleep 2
 done
-python scripts/bootstrap_admin.py
 # EMIT coverage for the map (public CMR; a failure must not block the platform)
 python scripts/refresh_catalog.py || echo "EMIT coverage not indexed yet (CMR unreachable?); Dagster retries daily"
 if [ -f /artifacts/models/${MODEL_VERSION:-v1}/hydra.onnx ]; then

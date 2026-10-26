@@ -2,12 +2,14 @@
 
 **Owner:** Ananthanarayanan
 
-Turns a raw hyperspectral cube into the **16 clean bands** the Hydra network
-reads, chosen to cover both agriculture and minerals. It runs on Dask, chunk by chunk, so memory stays bounded whatever the
-scene size. The folder is self-contained: it needs no `shared/` or `common/`.
+Cleans the raw EMIT cube that ingestion cropped to the user's box: every band
+is kept (HydraNet reads the full spectrum), and a 16-band quick-look product
+is written beside it. It runs on Dask, chunk by chunk, so memory stays bounded
+whatever the scene size. `thermal_service.py` does the same job for Landsat.
 
 ```
-raw-data ──▶ preprocessing ──▶ preprocessed-multiband ──▶ ml_inference
+raw.hyperspectral ──▶ service.py         ──▶ preprocessed.hyperspectral ──▶ ml_inference
+raw.thermal       ──▶ thermal_service.py ──▶ preprocessed.thermal       ──▶ ml_inference
 ```
 
 ## What it does, in order
@@ -26,33 +28,29 @@ Verified on a real EMIT L2A crop (276×277×285): 0.2 s, and identical to the
 earlier numpy pipeline (max difference 0). With 16 bands on a 553×553 EMIT
 crop: 1.1 s, every target within 3 nm of a sensor band, none interpolated.
 
-## Input: `raw-data`
+## Input: `raw.hyperspectral`
 
-The message ingestion already builds, unchanged:
-
-| Field | Meaning |
-|---|---|
-| `scene_id` | carried through to every output |
-| `zarr_path` | `raw-scenes/<zarr_path>`: plain zarr array (rows, cols, bands) |
-| `wavelengths` | used if the store has none in `attrs['wavelengths']` |
-| `satellite` | `EMIT` / `EnMAP` → already surface reflectance → no haze removal |
-| `bbox`, `timestamp`, `tasks` | passed through |
-
-The cube is expected to be **cropped to the user's bbox and orthorectified**.
-Messages may be msgpack or JSON.
-
-## Output: `preprocessed-multiband` (msgpack)
+`RawHyperspectral` in `libs/hs_common/hs_common/messages.py` (JSON schema in
+`contracts/`). The cube is already cropped to the bbox and orthorectified.
 
 | Field | Meaning |
 |---|---|
-| `data_path` | `preprocessed-data/<data_path>` = `multiband.npy`, (rows, cols, 16) float32, 0..1, no NaN. This is what `ml_inference` reads today. |
-| `zarr_path` | the same data as chunked Zarr `(256, 256, 16)`, for Dask/Ray |
-| `band_names`, `target_nm`, `wavelengths` | `b450…b2350`, requested nm, actual sensor nm |
-| `n_bands`, `shape` | 16 by default; `[rows, cols, n_bands]` |
-| `interpolated_bands` | targets that were estimated, not measured (normally `[]`) |
-| `dark_subtraction`, `quality` | what was applied; no-data fractions |
+| `zarr_key` | `silver/{job}/raw.zarr` in `S3_BUCKET`: (rows, cols, bands) |
+| `wavelengths`, `good_bands` | used if the store's attrs have none |
+| `satellite` | `EMIT` is already surface reflectance, so no haze removal |
+| `cloud_key`, `georef`, `bbox`, `tasks`, `source` | passed through |
 
-**No data** = all bands 0.
+## Output: `preprocessed.hyperspectral`
+
+| Field | Meaning |
+|---|---|
+| `reflectance_key` | `silver/{job}/reflectance.zarr`: every band, cleaned, 0..1, no NaN. HydraNet's input. |
+| `multiband_key` | `silver/{job}/multiband.zarr`: the 16 target bands below |
+| `wavelengths` | sensor wavelengths of `reflectance.zarr` |
+| `quality` | no-data fractions, bad-band count, scale, dark subtraction, seconds |
+
+**No data** = all bands 0. A scene that fails the quality gate is a permanent
+error: the job reports it instead of retrying.
 
 ## The band order
 
@@ -73,56 +71,34 @@ It replaces the old 10-band list, whose 1450 nm input sat inside a
 water-vapour window and so was interpolated, not measured. To run the old
 model unchanged, set
 `PREPROC_TARGET_BANDS="450,680,720,800,900,1450,2205,2265,2320,2350"`.
-**The model's input size must equal `n_bands`.** See
-[NOTE_FOR_AARON.md](NOTE_FOR_AARON.md).
+These bands only feed the quick-look product; HydraNet reads every band.
 
-## Handing off to Ray
+## Landsat (`thermal/`, `thermal_service.py`)
 
-`ray.data.from_dask` takes a Dask **dataframe**; this module outputs an array.
-`handoff.py` does the conversion (one row per pixel, row-major):
-
-```python
-cube = da.from_zarr(store)                       # preprocessed.zarr
-ds = ray.data.from_dask(to_dask_dataframe(cube))
-image = to_image(predictions, cube.shape)        # back onto the map
-```
-
-## Landsat (`thermal/`)
-
-Plain functions with no Kafka, because the pipeline has no thermal stage yet.
-Each applies the scene's own MTL calibration (Level-2, not Level-1) and the
-QA_PIXEL cloud mask, and reads only the bbox window in any UTM zone:
+`raw.thermal` → land surface temperature in °C as a COG at
+`silver/{job}/thermal/lst.tif` → `preprocessed.thermal`. Each scene's own MTL
+calibration (Level-2) and QA_PIXEL cloud mask are applied, and only the bbox
+window is read, in any UTM zone:
 
 ```python
 from thermal import process
 celsius, transform, crs, tags = process.thermal_celsius("..._ST_B10.TIF", bbox)
-refl, transform, crs, tags = process.surface_reflectance("..._SR_B5.TIF", bbox)
 ```
 
 Keep each scene's `_MTL.txt` and `_QA_PIXEL.TIF` beside its bands.
 
-## Integration notes
-
-1. **Ingestion should publish to `raw-data`**, not `preprocessed-multiband`.
-   Today it skips this stage. Its own `multiband.npy` is then redundant;
-   this module writes that file.
-2. Add `raw-data` to `KAFKA_CREATE_TOPICS`, unless topic auto-creation is relied on.
-3. **ml_inference must expect 16 inputs.** Today it hard-codes 10 and silently
-   drops any extra bands, so it would read the wrong ones. The exact change is in
-   [NOTE_FOR_AARON.md](NOTE_FOR_AARON.md).
-
 ## Configuration
 
-All values are in `config.py`, and every one can be overridden by environment variable:
-`PREPROC_INPUT_TOPIC`, `PREPROC_OUTPUT_TOPIC`, `PREPROC_BUCKET_IN`
-(`raw-scenes`), `PREPROC_BUCKET_OUT` (`preprocessed-data`), `PREPROC_WRITE_NPY`,
-`PREPROC_CHUNK_SIZE`, `PREPROC_DARK_SUBTRACTION` (`auto`/`always`/`never`).
-For AWS, set `S3_ENDPOINT_URL=""`.
+Every tunable number is in `config.py` and can be overridden by environment
+variable (`PREPROC_CHUNK_SIZE`, `PREPROC_DARK_SUBTRACTION` = `auto`/`always`/`never`,
+`PREPROC_MAX_NODATA_FRACTION`, `PREPROC_TARGET_BANDS`, ...). Kafka and object
+storage come from the shared platform settings in `hs_common`
+(`KAFKA_BOOTSTRAP_SERVERS`, `S3_BUCKET`, `S3_ENDPOINT_URL`; empty endpoint = AWS S3).
 
 ## Tests
 
 ```bash
 cd preprocessing
 pip install -r requirements.txt pytest
-python -m pytest tests/ -v          # 57 tests, ~2 s, no Kafka/MinIO needed
+python -m pytest tests/ -v          # 46 tests, ~2 s, no Kafka/MinIO needed
 ```

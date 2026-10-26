@@ -16,7 +16,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: "1.26.10"
-      - run: test -z "$(gofmt -l api_gateway orchestrator pkg)"
+      - run: test -z "$(gofmt -l api_gateway orchestrator pkg tests)"
       - run: go vet ./... && go test ./... && go build ./...
   python:
     runs-on: ubuntu-latest
@@ -82,20 +82,23 @@ jobs:
       - uses: actions/checkout@v4
       - name: model for the smoke test
         run: echo "CI trains a small model; see train.yml for the production one"
-      - name: up (fixture scenes, MinIO)
+      - name: up (fixture scenes, MinIO, fake Google sign-in)
         run: |
           cp .env.example .env
           sed -i "s/^JWT_SECRET=.*/JWT_SECRET=$(openssl rand -hex 32)/; s/^CREDENTIALS_KEY=.*/CREDENTIALS_KEY=$(openssl rand -hex 32)/; s/^DB_PASSWORD=.*/DB_PASSWORD=ci$(openssl rand -hex 8)/; \
                   s/^AWS_ACCESS_KEY_ID=.*/AWS_ACCESS_KEY_ID=ciminio$(openssl rand -hex 4)/; s/^AWS_SECRET_ACCESS_KEY=.*/AWS_SECRET_ACCESS_KEY=$(openssl rand -hex 20)/; s/^ALLOW_FIXTURES=.*/ALLOW_FIXTURES=true/" .env
+          sed -i "s|^OIDC_ISSUER=.*|OIDC_ISSUER=http://mock-oidc:9998|; s/^GOOGLE_CLIENT_ID=.*/GOOGLE_CLIENT_ID=ci-client/; \
+                  s/^GOOGLE_CLIENT_SECRET=.*/GOOGLE_CLIENT_SECRET=ci-secret/; s/^ALLOWED_EMAIL_DOMAINS=.*/ALLOWED_EMAIL_DOMAINS=example.com/; \
+                  s/^ADMIN_EMAIL=.*/ADMIN_EMAIL=admin@example.com/" .env
           pip install -c constraints.txt "./libs/hs_common[geo]" "./libs/hydra[training]" pandas "torch==2.5.1" --extra-index-url https://download.pytorch.org/whl/cpu
           cd training && python -m datagen --out artifacts/data --mineral-coverage 20000 --agri-lut 20000 --agri-train 20000 --thermal-scenes 60 \
             && python -m train --steps 1500 --eval-every 1500 --version v1 --out artifacts/models || true
           python -m verify_maps --model artifacts/models/v1 --data artifacts/data --emit-scenes 2 --no-landsat || true
-          cd .. && docker compose --profile local up -d --build --wait
+          cd .. && docker compose --profile local --profile test up -d --build --wait
           docker compose run --rm tools python scripts/promote_model.py --force --if-missing \
             --model-dir /artifacts/models/v1 --lut /artifacts/data/agri_lut.npz
-      - run: python tests/e2e.py --base http://localhost:3000 --jobs 3
+      - run: pip install requests && python tests/e2e.py --base http://localhost:3000 --jobs 3
       - name: attack tests (must all be blocked)
-        run: pip install requests && python tests/security.py --base http://localhost:3000 --env .env
+        run: python tests/security.py --base http://localhost:3000 --env .env
       - if: failure()
         run: docker compose logs --tail 200
