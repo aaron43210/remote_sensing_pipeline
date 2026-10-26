@@ -1,10 +1,13 @@
 data "aws_caller_identity" "me" {}
 
 locals {
-  bucket      = "hyperspectral-${var.name}-${var.env}"
-  origin_host = "origin.${var.domain_name}" # CloudFront -> instance, HTTPS (Let's Encrypt on the instance)
-  site_origin = "https://${var.domain_name}"
-  services    = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools", "pipelines"]
+  bucket              = "hyperspectral-${var.name}-${var.env}"
+  has_custom_domain   = var.domain_name != ""
+  origin_host         = local.has_custom_domain ? "origin.${var.domain_name}" : ""
+  default_origin_host = aws_eip.node.public_dns != "" ? aws_eip.node.public_dns : aws_instance.node.public_dns
+  site_origin         = local.has_custom_domain ? "https://${var.domain_name}" : "https://${aws_cloudfront_distribution.site.domain_name}"
+  domain_val          = local.has_custom_domain ? var.domain_name : aws_cloudfront_distribution.site.domain_name
+  services            = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools", "pipelines"]
 }
 
 # ── Object storage: the data lake (bronze / silver / gold / models) ──────────
@@ -138,7 +141,7 @@ resource "aws_ssm_parameter" "config" {
   for_each = {
     S3_BUCKET             = aws_s3_bucket.lake.bucket
     S3_REGION             = var.region
-    DOMAIN                = var.domain_name
+    DOMAIN                = local.domain_val
     ORIGIN_HOST           = local.origin_host
     PUBLIC_ORIGIN         = local.site_origin
     ADMIN_EMAIL           = var.admin_email
@@ -171,7 +174,7 @@ resource "aws_iam_role_policy_attachment" "ecr" {
 resource "aws_iam_role_policy" "node" {
   name = "hydranet-node"
   role = aws_iam_role.node.id
-  policy = jsonencode({ Version = "2012-10-17", Statement = [
+  policy = jsonencode({ Version = "2012-10-17", Statement = concat([
     { Effect = "Allow", Action = ["s3:ListBucket", "s3:GetBucketLocation"], Resource = aws_s3_bucket.lake.arn },
     { Effect = "Allow", Action = ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
     Resource = "${aws_s3_bucket.lake.arn}/*" },
@@ -179,10 +182,11 @@ resource "aws_iam_role_policy" "node" {
     Resource = "arn:aws:ssm:${var.region}:${data.aws_caller_identity.me.account_id}:parameter/hydranet/${var.env}/*" },
     { Effect = "Allow", Action = ["logs:CreateLogStream", "logs:PutLogEvents", "logs:DescribeLogStreams"],
     Resource = "${aws_cloudwatch_log_group.app.arn}:*" },
+    ], local.has_custom_domain ? [
     # certbot (scripts/origin_cert.sh): DNS-01 challenge for the origin certificate
     { Effect = "Allow", Action = ["route53:ListHostedZones", "route53:GetChange"], Resource = "*" },
-    { Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = data.aws_route53_zone.site.arn },
-  ] })
+    { Effect = "Allow", Action = ["route53:ChangeResourceRecordSets"], Resource = data.aws_route53_zone.site[0].arn },
+  ] : []) })
 }
 
 resource "aws_cloudwatch_log_group" "app" {
@@ -206,12 +210,14 @@ data "aws_ec2_managed_prefix_list" "cloudfront" {
 
 resource "aws_security_group" "node" {
   name        = "hydranet-${var.env}"
-  description = "HTTPS from CloudFront only; no SSH (use SSM Session Manager)"
+  description = "Traffic from CloudFront only; no SSH (use SSM Session Manager)"
   vpc_id      = data.aws_vpc.default.id
+  # ONE port only: the CloudFront prefix list counts as ~55 rules, and a group holds 60.
+  # Own domain: HTTPS (443). No domain: HTTP (80), CloudFront's default domain cannot cover the server.
   ingress {
-    description     = "HTTPS from CloudFront edge locations only"
-    from_port       = 443
-    to_port         = 443
+    description     = "From CloudFront edge locations only"
+    from_port       = local.has_custom_domain ? 443 : 80
+    to_port         = local.has_custom_domain ? 443 : 80
     protocol        = "tcp"
     prefix_list_ids = [data.aws_ec2_managed_prefix_list.cloudfront.id]
   }
@@ -260,14 +266,16 @@ resource "aws_eip_association" "node" {
   allocation_id = aws_eip.node.id
 }
 
-# ── DNS + certificates (your domain's hosted zone must already exist in Route 53) ──
+# ── DNS + certificates (used when custom domain is configured) ───────────────
 data "aws_route53_zone" "site" {
+  count        = local.has_custom_domain ? 1 : 0
   name         = var.route53_zone_name
   private_zone = false
 }
 
 resource "aws_route53_record" "origin" {
-  zone_id = data.aws_route53_zone.site.zone_id
+  count   = local.has_custom_domain ? 1 : 0
+  zone_id = data.aws_route53_zone.site[0].zone_id
   name    = local.origin_host
   type    = "A"
   ttl     = 300
@@ -275,6 +283,7 @@ resource "aws_route53_record" "origin" {
 }
 
 resource "aws_acm_certificate" "site" { # CloudFront certificates must live in us-east-1
+  count             = local.has_custom_domain ? 1 : 0
   provider          = aws.us_east_1
   domain_name       = var.domain_name
   validation_method = "DNS"
@@ -282,8 +291,8 @@ resource "aws_acm_certificate" "site" { # CloudFront certificates must live in u
 }
 
 resource "aws_route53_record" "acm" {
-  for_each = { for o in aws_acm_certificate.site.domain_validation_options : o.domain_name => o }
-  zone_id  = data.aws_route53_zone.site.zone_id
+  for_each = local.has_custom_domain ? { for o in aws_acm_certificate.site[0].domain_validation_options : o.domain_name => o } : {}
+  zone_id  = data.aws_route53_zone.site[0].zone_id
   name     = each.value.resource_record_name
   type     = each.value.resource_record_type
   records  = [each.value.resource_record_value]
@@ -291,14 +300,15 @@ resource "aws_route53_record" "acm" {
 }
 
 resource "aws_acm_certificate_validation" "site" {
+  count                   = local.has_custom_domain ? 1 : 0
   provider                = aws.us_east_1
-  certificate_arn         = aws_acm_certificate.site.arn
+  certificate_arn         = aws_acm_certificate.site[0].arn
   validation_record_fqdns = [for r in aws_route53_record.acm : r.fqdn]
 }
 
 resource "aws_route53_record" "site" {
-  for_each = toset(["A", "AAAA"])
-  zone_id  = data.aws_route53_zone.site.zone_id
+  for_each = local.has_custom_domain ? toset(["A", "AAAA"]) : toset([])
+  zone_id  = data.aws_route53_zone.site[0].zone_id
   name     = var.domain_name
   type     = each.key
   alias {
@@ -359,9 +369,9 @@ resource "aws_cloudfront_distribution" "site" {
   is_ipv6_enabled = true
   comment         = "hydranet-${var.env}"
   price_class     = "PriceClass_100"
-  aliases         = [var.domain_name]
+  aliases         = local.has_custom_domain ? [var.domain_name] : []
   origin {
-    domain_name = local.origin_host
+    domain_name = local.has_custom_domain ? local.origin_host : local.default_origin_host
     origin_id   = "node"
     custom_header {
       name  = "X-Origin-Verify"
@@ -370,7 +380,7 @@ resource "aws_cloudfront_distribution" "site" {
     custom_origin_config {
       http_port                = 80
       https_port               = 443
-      origin_protocol_policy   = "https-only"
+      origin_protocol_policy   = local.has_custom_domain ? "https-only" : "http-only"
       origin_ssl_protocols     = ["TLSv1.2"]
       origin_read_timeout      = 60
       origin_keepalive_timeout = 60
@@ -399,11 +409,12 @@ resource "aws_cloudfront_distribution" "site" {
   }
   web_acl_id = var.enable_waf ? aws_wafv2_web_acl.site[0].arn : null #trivy:ignore:AVD-AWS-0011 WAF is optional (cost); see enable_waf
   viewer_certificate {
-    acm_certificate_arn      = aws_acm_certificate_validation.site.certificate_arn
-    ssl_support_method       = "sni-only"
-    minimum_protocol_version = "TLSv1.2_2021"
+    cloudfront_default_certificate = local.has_custom_domain ? false : true
+    acm_certificate_arn            = local.has_custom_domain ? aws_acm_certificate_validation.site[0].certificate_arn : null
+    ssl_support_method             = local.has_custom_domain ? "sni-only" : null
+    minimum_protocol_version       = local.has_custom_domain ? "TLSv1.2_2021" : "TLSv1"
   }
-  depends_on = [aws_route53_record.origin]
+  depends_on = [aws_eip_association.node]
 }
 
 # ── Optional WAF in front of CloudFront (~$8-10/month): AWS common rules + per-IP rate limit

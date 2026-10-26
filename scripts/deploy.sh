@@ -26,6 +26,16 @@ case "$EARTHDATA" in CHANGE_ME|unset) EARTHDATA="" ;; esac
 
 DOMAIN_=$(get DOMAIN)
 REGISTRY=$(get REGISTRY)
+# Own domain: CloudFront -> server over HTTPS (:443, Let's Encrypt). No domain (*.cloudfront.net):
+# no certificate can be issued for the server, so CloudFront -> server is HTTP (:80), still locked
+# to CloudFront by the security group and the secret header.
+ORIGIN_HOST="${ORIGIN_HOST:-}"
+[ "$ORIGIN_HOST" = "-" ] && ORIGIN_HOST=""
+if [ -n "$ORIGIN_HOST" ]; then
+  FRONTEND_PORT=443; NGINX_TEMPLATE_DIR=/etc/nginx/templates-aws
+else
+  FRONTEND_PORT=80; NGINX_TEMPLATE_DIR=/etc/nginx/templates
+fi
 umask 077
 cat > .env <<ENV
 ENV=${ENV}
@@ -58,6 +68,8 @@ ORIGIN_SECRET=$(get ORIGIN_SECRET)
 ORIGIN_HOST=${ORIGIN_HOST}
 CSP_EXTRA=' upgrade-insecure-requests'
 STORAGE_ORIGIN=https://$(get S3_BUCKET).s3.${S3_REGION}.amazonaws.com
+FRONTEND_PORT=${FRONTEND_PORT}
+NGINX_TEMPLATE_DIR=${NGINX_TEMPLATE_DIR}
 ENV
 chmod 600 .env
 
@@ -70,13 +82,21 @@ $C up -d kafka-init
 $C up -d --remove-orphans api_gateway orchestrator ingestion preprocessing preprocessing-thermal ml_inference event_sink frontend
 $C run --rm tools
 
-# Through nginx exactly as CloudFront arrives: HTTPS, the site's Host name, the secret header.
+# Through nginx exactly as CloudFront arrives: Host name and the secret header.
 SECRET=$(grep '^ORIGIN_SECRET=' .env | cut -d= -f2)
 for _ in $(seq 1 30); do
-  if curl -fsS --resolve "${DOMAIN_}:443:127.0.0.1" -H "X-Origin-Verify: ${SECRET}" \
-      "https://${DOMAIN_}/api/config" >/dev/null; then
-    echo "healthy: ${TAG}"
-    exit 0
+  if [ "$FRONTEND_PORT" = "443" ]; then
+    if curl -fsS --resolve "${DOMAIN_}:443:127.0.0.1" -H "X-Origin-Verify: ${SECRET}" \
+        "https://${DOMAIN_}/api/config" >/dev/null; then
+      echo "healthy: ${TAG}"
+      exit 0
+    fi
+  else
+    if curl -fsS -H "Host: ${DOMAIN_}" -H "X-Origin-Verify: ${SECRET}" \
+        "http://127.0.0.1/api/config" >/dev/null; then
+      echo "healthy: ${TAG}"
+      exit 0
+    fi
   fi
   sleep 5
 done

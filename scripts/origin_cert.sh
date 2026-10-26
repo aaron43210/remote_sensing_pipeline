@@ -5,6 +5,10 @@
 # then reloads nginx. Idempotent: renews only within 30 days of expiry.
 set -euo pipefail
 source /opt/hydranet/.bootstrap
+if [ -z "${ORIGIN_HOST:-}" ] || [ "${ORIGIN_HOST}" = "-" ]; then
+  echo "No custom domain configured; skipping origin TLS certificate."
+  exit 0
+fi
 docker run --rm -v /etc/letsencrypt:/etc/letsencrypt certbot/dns-route53:v5.1.0 certonly \
   --dns-route53 --non-interactive --agree-tos -m "$LE_EMAIL" --keep-until-expiring \
   --cert-name "$ORIGIN_HOST" -d "$ORIGIN_HOST" -d "$DOMAIN"
