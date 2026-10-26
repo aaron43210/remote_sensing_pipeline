@@ -81,7 +81,7 @@ resource "aws_s3_bucket_cors_configuration" "lake" {
 resource "aws_ecr_repository" "svc" {
   for_each             = toset(local.services)
   name                 = "hydranet/${each.key}"
-  image_tag_mutability = "IMMUTABLE"
+  image_tag_mutability = "MUTABLE"
   image_scanning_configuration { scan_on_push = true }
 }
 
