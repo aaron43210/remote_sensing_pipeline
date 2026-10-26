@@ -26,6 +26,10 @@ case "$EARTHDATA" in CHANGE_ME|unset) EARTHDATA="" ;; esac
 
 DOMAIN_=$(get DOMAIN)
 REGISTRY=$(get REGISTRY)
+BUCKET=$(get S3_BUCKET)
+# true = any verified Google account may sign in (terraform: open_signup); missing parameter = off
+OPEN_SIGNUP_=$(get OPEN_SIGNUP 2>/dev/null || true)
+[ "$OPEN_SIGNUP_" = "true" ] || OPEN_SIGNUP_=false
 # Own domain: CloudFront -> server over HTTPS (:443, Let's Encrypt). No domain (*.cloudfront.net):
 # no certificate can be issued for the server, so CloudFront -> server is HTTP (:80), still locked
 # to CloudFront by the security group and the secret header.
@@ -52,10 +56,10 @@ OIDC_ISSUER=https://accounts.google.com
 ADMIN_EMAIL=$(get ADMIN_EMAIL)
 ALLOWED_EMAILS=$(get ALLOWED_EMAILS)
 ALLOWED_EMAIL_DOMAINS=$(get ALLOWED_EMAIL_DOMAINS)
-OPEN_SIGNUP=true
+OPEN_SIGNUP=${OPEN_SIGNUP_}
 ALLOWED_ORIGINS=https://${DOMAIN_}
 EARTHDATA_TOKEN=${EARTHDATA}
-S3_BUCKET=$(get S3_BUCKET)
+S3_BUCKET=${BUCKET}
 S3_REGION=${S3_REGION}
 S3_ENDPOINT_URL=
 S3_PUBLIC_ENDPOINT_URL=
@@ -67,7 +71,7 @@ TRUST_CLOUDFRONT=on
 ORIGIN_SECRET=$(get ORIGIN_SECRET)
 ORIGIN_HOST=${ORIGIN_HOST}
 CSP_EXTRA=' upgrade-insecure-requests'
-STORAGE_ORIGIN=https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com https://${S3_BUCKET}.s3.dualstack.${S3_REGION}.amazonaws.com https://${S3_BUCKET}.s3.amazonaws.com
+STORAGE_ORIGIN=https://${BUCKET}.s3.${S3_REGION}.amazonaws.com https://${BUCKET}.s3.dualstack.${S3_REGION}.amazonaws.com https://${BUCKET}.s3.amazonaws.com
 FRONTEND_PORT=${FRONTEND_PORT}
 NGINX_TEMPLATE_DIR=${NGINX_TEMPLATE_DIR}
 ENV
