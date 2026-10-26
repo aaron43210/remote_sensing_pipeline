@@ -136,7 +136,7 @@ terraform apply
 
 The apply creates:
 - the S3 data bucket (private, encrypted, HTTPS-only) and ECR registries;
-- an EC2 `t4g.large` server with a fixed Elastic IP;
+- an EC2 `m7i-flex.large` server (2 vCPU, 8 GB, allowed on the Free plan) with a fixed Elastic IP;
 - CloudFront with an ACM certificate, and the DNS records;
 - secrets in SSM, an AWS budget with e-mail alerts, and daily disk snapshots;
 - the GitHub deploy role.
@@ -171,7 +171,11 @@ Tip: put a space before each command, so your shell history does not keep the se
 In github.com/aaron43210/remote_sensing_pipeline → *Settings*:
 
 1. *Environments* → *New environment* → name **`production`** → add yourself as a **required reviewer**.
-   AWS only trusts this environment and release tags.
+   AWS only trusts this environment and `v*` release tags, of this exact repository.
+   For the strongest lock, after the first release look up GitHub's immutable repository form in
+   *CloudTrail* → *Event history* → event name `AssumeRoleWithWebIdentity` (user name looks like
+   `repo:owner@123/repo@456:...`), put `owner@123/repo@456` into `github_repo_ids` in tfvars and apply.
+   Never use wildcards like `owner*` or `repo:...:*`: they let other repositories or any branch deploy.
 2. *Secrets and variables* → *Actions* → *New repository secret*:
 
 | Secret | Value |
@@ -199,19 +203,23 @@ git tag -a v1.0.0 -m "HydraNet v1.0.0"
 git push origin v1.0.0
 ```
 
-1. GitHub → *Actions* → **release** builds 9 images (arm64 + amd64) into ECR. This takes about 20 minutes.
+Every later release gets a **new** tag (`v1.0.1`, `v1.0.2`, ...): image tags are immutable, so a tag can
+never be swapped for different code. Do not force-move a tag.
+
+1. GitHub → *Actions* → **release** builds the 8 server images (amd64) into ECR. This takes about 15 minutes.
 2. *Actions* → **deploy** → *Run workflow* → tag `v1.0.0` → approve (production environment).
 
    The deploy then runs on the server, in order:
    - reads every setting from SSM;
    - gets the origin's Let's Encrypt certificate;
    - starts the stack and promotes the bundled v1 model;
-   - checks health over HTTPS.
+   - checks health, and **fails the deploy if no model is active** (map jobs would fail without one).
 
 The server's first boot also sets up:
 - a 4 GB swap file;
 - the firewall rule that blocks containers without AWS needs from the instance metadata service;
-- daily timers for certificate renewal and Postgres backups to S3.
+- daily timers for certificate renewal and Postgres backups to S3
+  (each deploy also installs a daily refresh of the EMIT coverage map).
 
 ---
 
@@ -237,24 +245,35 @@ Logs are in *CloudWatch* → *Log groups* → `/hydranet/prod`.
 
 ---
 
-## 11. Costs (fits $120 of credits)
+## 11. Costs
+
+On an AWS **Free plan** account the $120 credits pay for everything and nothing is ever charged to a card:
+when the credits are used up, or the plan expires (6 months after sign-up), AWS closes the account, and its
+resources are deleted unless it is upgraded to a paid plan in time (AWS e-mails before that).
+So the goal is for the credits to last until the plan expires, and to export anything worth keeping before then.
+Check both in *Billing* → *Free plan* (or `aws freetier get-account-plan-state --region us-east-1`).
 
 | Item | About / month |
 |---|---|
-| EC2 `t4g.large`, 15 h/day (stops 22:00–07:00 Pacific) | $30 |
-| EBS 50 GB + daily snapshots | $5 |
-| Elastic IP (public IPv4) | $3.65 |
-| S3, ECR, CloudWatch logs (14-day retention) | $2–4 |
-| Route 53 zone | $0.50 |
-| CloudFront, SSM, ACM certificate | free tier / $0 |
-| **Total** | **about $42** → $120 lasts about 3 months |
+| EC2 `m7i-flex.large`, $0.096/h, 12 h/day (08:00–20:00 Pacific, the default) | $35 |
+| EBS 50 GB gp3 + daily snapshots | $4.5 |
+| Elastic IP (public IPv4, charged all day) | $3.65 |
+| S3, ECR (3 releases kept), CloudWatch logs (14 days) | $1–2 |
+| CloudFront (free 1 TB), SSM, budget, Session Manager | $0 |
+| Route 53 zone (only with your own domain) | $0.50 |
+| **Total** | **about $44** |
 
-To stretch the credits:
-- Keep `office_hours_only = true` (the default).
+To stretch the credits further, in `terraform.tfvars` then `terraform apply`:
+
+| Setting | Server hours | About / month |
+|---|---|---|
+| `run_start_hour = 8`, `run_stop_hour = 20` (default) | 12 h, every day | $44 |
+| same + `run_days = "MON-FRI"` | 12 h, weekdays | $34 |
+| `run_start_hour = 9`, `run_stop_hour = 18`, `run_days = "MON-FRI"` | 9 h, weekdays | $28 |
+
 - Leave `enable_waf = false`: the WAF adds about $8–10 a month.
-- Move to `t4g.xlarge` only if large scenes run out of memory.
-
-The budget e-mails you at 25 / 50 / 80 / 100 % of `budget_usd`.
+- The budget measures real usage **before** credits, and e-mails `alert_email` at 25 / 50 / 80 / 100 %
+  of `budget_usd` and when the month is forecast to go over it.
 
 **When the credits run out:**
 1. Download what you want to keep from `s3://hyperspectral-<H>-prod/`.

@@ -118,11 +118,11 @@ operations (key rotation, incident response) and trade-offs: **[SECURITY.md](SEC
 
 Step by step, including what to get from AWS, Google and NASA: **[docs/SETUP_AWS.md](docs/SETUP_AWS.md)**.
 
-`infra/terraform`: one EC2 t4g.large (fixed Elastic IP, swap, nightly stop) running this compose stack,
+`infra/terraform`: one EC2 m7i-flex.large (Free-plan type; fixed Elastic IP, swap, runs 08:00–20:00) running this compose stack,
 S3 data lake, CloudFront on your domain (ACM), HTTPS + secret header from CloudFront to the server,
 ECR, SSM secrets, daily Postgres and disk backups, budget alerts, optional WAF, GitHub OIDC; state in a
 private S3 bucket. Then `release.yml` (multi-arch images on a `v*` tag) and `deploy.yml` (through SSM,
-approved in the `production` environment). About $42/month, so $120 of credits last about 3 months.
+approved in the `production` environment). About $44/month (less on weekdays-only hours); no domain needed (`*.cloudfront.net`).
 
 ## Known limitations (honest list)
 

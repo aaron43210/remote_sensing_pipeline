@@ -7,7 +7,12 @@ locals {
   default_origin_host = aws_eip.node.public_dns != "" ? aws_eip.node.public_dns : aws_instance.node.public_dns
   site_origin         = local.has_custom_domain ? "https://${var.domain_name}" : "https://${aws_cloudfront_distribution.site.domain_name}"
   domain_val          = local.has_custom_domain ? var.domain_name : aws_cloudfront_distribution.site.domain_name
-  services            = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools", "pipelines"]
+  # Who may assume the deploy role: this repository only (classic name and, when set, GitHub's
+  # immutable "owner@id/repo@id" form, which a renamed or look-alike repository cannot match),
+  # and only the production environment (deploy, train) or a v* release tag (image builds).
+  github_repos    = compact([var.github_repo, var.github_repo_ids])
+  github_subjects = flatten([for r in local.github_repos : ["repo:${r}:environment:production", "repo:${r}:ref:refs/tags/v*"]])
+  services        = ["api_gateway", "orchestrator", "ingestion", "preprocessing", "ml_inference", "event_sink", "frontend", "tools"]
 }
 
 # ── Object storage: the data lake (bronze / silver / gold / models) ──────────
@@ -81,16 +86,22 @@ resource "aws_s3_bucket_cors_configuration" "lake" {
 resource "aws_ecr_repository" "svc" {
   for_each             = toset(local.services)
   name                 = "hydranet/${each.key}"
-  image_tag_mutability = "MUTABLE"
+  image_tag_mutability = "IMMUTABLE" # a release tag can never be swapped for other code: release v1.0.1, v1.0.2, ...
+  force_delete         = true        # terraform destroy also removes the images
   image_scanning_configuration { scan_on_push = true }
 }
 
 resource "aws_ecr_lifecycle_policy" "svc" {
   for_each   = aws_ecr_repository.svc
   repository = each.value.name
-  policy = jsonencode({ rules = [{ rulePriority = 1, description = "keep 5 images",
-    selection = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 5 },
-  action = { type = "expire" } }] })
+  policy = jsonencode({ rules = [
+    { rulePriority = 1, description = "drop untagged layers after a day",
+      selection    = { tagStatus = "untagged", countType = "sinceImagePushed", countUnit = "days", countNumber = 1 },
+    action = { type = "expire" } },
+    { rulePriority = 2, description = "keep the 3 newest releases (rollback)",
+      selection    = { tagStatus = "any", countType = "imageCountMoreThan", countNumber = 3 },
+    action = { type = "expire" } },
+  ] })
 }
 
 # ── Secrets (SSM Parameter Store, free tier) ─────────────────────────────────
@@ -143,7 +154,6 @@ resource "aws_ssm_parameter" "config" {
     S3_REGION             = var.region
     DOMAIN                = local.domain_val
     ORIGIN_HOST           = local.origin_host
-    PUBLIC_ORIGIN         = local.site_origin
     ADMIN_EMAIL           = var.admin_email
     ALLOWED_EMAILS        = join(",", var.allowed_emails)
     ALLOWED_EMAIL_DOMAINS = join(",", var.allowed_email_domains)
@@ -526,6 +536,10 @@ resource "aws_budgets_budget" "monthly" {
   limit_amount = tostring(var.budget_usd)
   limit_unit   = "USD"
   time_unit    = "MONTHLY"
+  cost_types {
+    include_credit = false # alert on what the stack uses, not on the $0 left after credits
+    include_refund = false
+  }
   dynamic "notification" {
     for_each = [25, 50, 80, 100]
     content {
@@ -535,6 +549,13 @@ resource "aws_budgets_budget" "monthly" {
       notification_type          = "ACTUAL"
       subscriber_email_addresses = [var.alert_email]
     }
+  }
+  notification { # early warning: the month is on course to exceed the budget
+    comparison_operator        = "GREATER_THAN"
+    threshold                  = 100
+    threshold_type             = "PERCENTAGE"
+    notification_type          = "FORECASTED"
+    subscriber_email_addresses = [var.alert_email]
   }
 }
 
@@ -551,8 +572,11 @@ resource "aws_iam_role" "scheduler" {
 }
 
 resource "aws_scheduler_schedule" "power" {
-  for_each = var.office_hours_only ? { stop = "cron(0 22 * * ? *)", start = "cron(0 7 * * ? *)" } : {}
-  name     = "hydranet-${var.env}-${each.key}"
+  for_each = var.office_hours_only ? {
+    stop  = "cron(0 ${var.run_stop_hour} ? * ${var.run_days} *)"
+    start = "cron(0 ${var.run_start_hour} ? * ${var.run_days} *)"
+  } : {}
+  name = "hydranet-${var.env}-${each.key}"
   flexible_time_window { mode = "OFF" }
   schedule_expression          = each.value
   schedule_expression_timezone = "America/Los_Angeles"
@@ -565,8 +589,8 @@ resource "aws_scheduler_schedule" "power" {
 
 # ── GitHub Actions deploys with OIDC (no long-lived keys) ────────────────────
 resource "aws_iam_openid_connect_provider" "github" {
-  url             = "https://token.actions.githubusercontent.com"
-  client_id_list  = ["sts.amazonaws.com"]
+  url            = "https://token.actions.githubusercontent.com"
+  client_id_list = ["sts.amazonaws.com"]
   thumbprint_list = [
     "6938fd4d98bab03faadb97b34396831e3780aea1",
     "1b51337f2181470704d52450ec84732706f72749"
@@ -579,13 +603,8 @@ resource "aws_iam_role" "deploy" {
     Principal = { Federated = aws_iam_openid_connect_provider.github.arn }, Action = "sts:AssumeRoleWithWebIdentity",
     Condition = {
       StringEquals = { "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com" },
-      StringLike = {
-        "token.actions.githubusercontent.com:sub" = [
-          "repo:${var.github_repo}:*",
-          "repo:aaron43210*remote_sensing_pipeline*:*"
-        ]
-      }
-    } }] })
+      StringLike   = { "token.actions.githubusercontent.com:sub" = local.github_subjects }
+  } }] })
 }
 
 resource "aws_iam_role_policy" "deploy" {

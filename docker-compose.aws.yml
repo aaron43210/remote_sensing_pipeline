@@ -55,8 +55,8 @@ services:
       test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
     networks:
       default: {ipv4_address: 10.88.0.10}
-  tools: {image: "${REGISTRY}/hydranet/tools:${TAG}", volumes: []}
-  dagster: {<<: *aws-logging, image: "${REGISTRY}/hydranet/pipelines:${TAG}"}
+  # !reset: drop the base file's ./training/artifacts mount, which would hide the model baked into the image
+  tools: {image: "${REGISTRY}/hydranet/tools:${TAG}", volumes: !reset []}
   kafka:
     <<: *aws-logging
     environment:
