@@ -11,6 +11,10 @@ admin_email           = "CHANGE_ME"             # your Google account: becomes a
 allowed_emails        = []                      # e.g. ["friend@gmail.com"]
 allowed_email_domains = []                      # e.g. ["yourlab.org"] (Google Workspace) or ["gmail.com"]
 github_repo           = "aaron43210/remote_sensing_pipeline"
-# instance_type     = "t4g.large"               # t4g.xlarge (16 GB) if big scenes run out of memory
-# office_hours_only = true                      # stop 22:00-07:00 Pacific to save credits
+# github_repo_ids     = "owner@ownerId/repo@repoId"  # optional: GitHub's immutable form, from CloudTrail (see SETUP_AWS.md)
+# instance_type     = "m7i-flex.large"          # 8 GB x86; the Free plan allows only flex/micro/small types
+# office_hours_only = true                      # run only run_start_hour..run_stop_hour (Pacific) to save credits
+# run_start_hour    = 8
+# run_stop_hour     = 20
+# run_days          = "*"                       # "MON-FRI" = weekdays only (cheapest)
 # budget_usd        = 45

@@ -8,7 +8,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        svc: [api_gateway, orchestrator, ingestion, preprocessing, ml_inference, event_sink, frontend, tools, pipelines]
+        svc: [api_gateway, orchestrator, ingestion, preprocessing, ml_inference, event_sink, frontend, tools]   # what runs on AWS (Dagster is local-only)
     steps:
       - uses: actions/checkout@v4
       - uses: aws-actions/configure-aws-credentials@v4
@@ -20,9 +20,8 @@ jobs:
         with:
           context: .
           file: ${{ matrix.svc }}/Dockerfile
-          platforms: linux/amd64
+          platforms: linux/amd64   # the server is x86 (m7i-flex.large, AWS Free plan)
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/hydranet/${{ matrix.svc }}:${{ github.ref_name }}
           cache-from: type=gha,scope=${{ matrix.svc }}
           cache-to: type=gha,mode=max,scope=${{ matrix.svc }}
-

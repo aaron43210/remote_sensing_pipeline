@@ -12,9 +12,9 @@ variable "name" {
   type        = string
 }
 variable "instance_type" {
-  description = "t4g.large = 2 vCPU / 8 GB arm64 (images are multi-arch). t3.large for x86."
+  description = "m7i-flex.large = 2 vCPU / 8 GB x86, allowed on the AWS Free plan (release.yml builds amd64 images)"
   type        = string
-  default     = "t4g.large"
+  default     = "m7i-flex.large"
 }
 variable "volume_gb" {
   type    = number
@@ -33,9 +33,27 @@ variable "github_repo" {
   type        = string
 }
 variable "office_hours_only" {
-  description = "Stop the instance 22:00-07:00 (America/Los_Angeles) to save credits"
+  description = "Run the instance only between run_start_hour and run_stop_hour (America/Los_Angeles) to save credits"
   type        = bool
   default     = true
+}
+variable "run_start_hour" {
+  type    = number
+  default = 8
+}
+variable "run_stop_hour" {
+  type    = number
+  default = 20
+}
+variable "run_days" {
+  description = "Days the instance runs: \"*\" (every day) or \"MON-FRI\" (weekdays only, cheapest)"
+  type        = string
+  default     = "*"
+}
+variable "github_repo_ids" {
+  description = "GitHub's immutable form owner@ownerId/repo@repoId (seen in CloudTrail AssumeRoleWithWebIdentity), e.g. aaron43210@225593939/remote_sensing_pipeline@1357258149"
+  type        = string
+  default     = ""
 }
 variable "admin_email" {
   description = "Google account that becomes admin on first sign-in"
