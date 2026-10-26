@@ -67,7 +67,7 @@ TRUST_CLOUDFRONT=on
 ORIGIN_SECRET=$(get ORIGIN_SECRET)
 ORIGIN_HOST=${ORIGIN_HOST}
 CSP_EXTRA=' upgrade-insecure-requests'
-STORAGE_ORIGIN=https://$(get S3_BUCKET).s3.${S3_REGION}.amazonaws.com
+STORAGE_ORIGIN=https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com https://${S3_BUCKET}.s3.dualstack.${S3_REGION}.amazonaws.com https://${S3_BUCKET}.s3.amazonaws.com
 FRONTEND_PORT=${FRONTEND_PORT}
 NGINX_TEMPLATE_DIR=${NGINX_TEMPLATE_DIR}
 ENV
