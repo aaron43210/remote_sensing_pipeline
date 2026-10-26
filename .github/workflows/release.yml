@@ -6,6 +6,7 @@ jobs:
   images:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         svc: [api_gateway, orchestrator, ingestion, preprocessing, ml_inference, event_sink, frontend, tools, pipelines]
     steps:
@@ -14,14 +15,14 @@ jobs:
         with: {role-to-assume: "${{ secrets.AWS_DEPLOY_ROLE }}", aws-region: us-west-2}
       - id: ecr
         uses: aws-actions/amazon-ecr-login@v2
-      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/build-push-action@v6
         with:
           context: .
           file: ${{ matrix.svc }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: linux/amd64
           push: true
           tags: ${{ steps.ecr.outputs.registry }}/hydranet/${{ matrix.svc }}:${{ github.ref_name }}
           cache-from: type=gha,scope=${{ matrix.svc }}
           cache-to: type=gha,mode=max,scope=${{ matrix.svc }}
+
