@@ -44,8 +44,8 @@ func (s *Server) Routes() *gin.Engine {
 	api := r.Group("/api")
 	authLimit := middleware.RateLimit(s.Redis, "auth", s.Cfg.AuthRateLimitPerMin, middleware.ByIP)
 	csrf := middleware.SameOriginCSRF(s.Cfg.AllowedOrigins)
-	api.POST("/auth/register", authLimit, s.Register)
-	api.POST("/auth/login", authLimit, s.Login)
+	api.GET("/auth/google/login", authLimit, s.GoogleLogin) // sign-in is Google only
+	api.GET("/auth/google/callback", authLimit, s.GoogleCallback)
 	api.POST("/auth/refresh", authLimit, csrf, s.Refresh) // refresh-token cookie
 	api.POST("/auth/logout", csrf, s.Logout)
 	api.GET("/jobs/:id/events", s.Events) // authenticated by a one-time stream ticket

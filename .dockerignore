@@ -6,6 +6,9 @@
 **/.pytest_cache
 **/.venv
 training/artifacts
+# ...except the released model, which the tools image carries so a fresh AWS deploy promotes it
+!training/artifacts/models/v1
+!training/artifacts/data/agri_lut.npz
 **/.DS_Store
 .env
 .env.*

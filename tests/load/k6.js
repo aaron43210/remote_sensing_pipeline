@@ -1,10 +1,12 @@
 // Load test: many users at once, like the UI behaves.
-// NOTE: from ONE machine every virtual user shares one IP, so the per-IP sign-up
-// limit (security) caps registrations at 20/min. For capacity runs target the
+// NOTE: from ONE machine every virtual user shares one IP, so the per-IP sign-in
+// limit (security) caps sign-ins at 20/min. For capacity runs target the
 // gateway directly with the limits lifted (see README); through the edge this
 // script instead demonstrates that the limit holds.
 //   docker run --rm --network hydranet_default -v $PWD/tests/load:/s grafana/k6:0.54.0 run /s/k6.js
-// Each virtual user: register -> config/model -> submit a job (areas repeat on
+// Sign-in uses the test IdP (docker compose --profile test): the gateway's
+// redirect is followed to mock-oidc and back, as a browser would.
+// Each virtual user: sign in -> config/model -> submit a job (areas repeat on
 // purpose: identical requests are coalesced / reused) -> poll status every 2 s
 // like the UI's fallback -> fetch layers. Thresholds fail the run if the API
 // gets slow or errors under load.
@@ -27,7 +29,7 @@ export const options = {
   thresholds: {
     'http_req_duration{kind:api}': ['p(95)<500'],
     'http_req_failed{kind:api}': ['rate<0.01'],
-    'http_req_duration{name:register}': ['p(95)<2000'],
+    'http_req_duration{name:signin}': ['p(95)<2000'],
     'http_req_duration{name:job}': ['p(95)<300'],
     'http_req_duration{name:submit}': ['p(95)<500'],
     'http_req_duration{name:layers}': ['p(95)<500'],
@@ -45,14 +47,25 @@ const AREAS = Array.from({ length: 40 }, (_, i) => {
   return [lon, lat, +(lon + 0.05).toFixed(3), +(lat + 0.05).toFixed(3)]
 })
 
-let token = null   // per virtual user: sign up once, then keep using the app like a person
+let token = null   // per virtual user: sign in once, then keep using the app like a person
+const IDP = __ENV.IDP || 'http://mock-oidc:9998'
+
+function signIn(email) {
+  const noFollow = { redirects: 0, tags: { kind: 'api', name: 'signin' } }
+  const start = http.get(`${BASE}/api/auth/google/login`, noFollow)
+  if (start.status !== 302) return null
+  // inside the compose network the IdP's browser URL (localhost:9998) is mock-oidc:9998
+  const authz = http.get(start.headers.Location.replace('http://localhost:9998', IDP) + `&login_hint=${encodeURIComponent(email)}`, noFollow)
+  const back = http.get(authz.headers.Location.replace('http://localhost:3000', BASE), noFollow)
+  if (back.status !== 303) return null
+  const r = http.post(`${BASE}/api/auth/refresh`, null, { headers: { 'X-Requested-With': 'hydranet' }, tags: { kind: 'api', name: 'signin' } })
+  return r.status === 200 ? r.json('token') : null
+}
 
 export default function () {
   if (!token) {
-    const email = `load-${__VU}-${Date.now()}@example.com`
-    const reg = http.post(`${BASE}/api/auth/register`, JSON.stringify({ email, password: 'load-test-pass', name: 'load' }), named(json, 'register'))
-    if (!check(reg, { registered: (r) => r.status === 201 })) { sleep(5); return }   // rate-limited: back off
-    token = reg.json('token')
+    token = signIn(`load-${__VU}-${Date.now()}@example.com`)
+    if (!check(token, { 'signed in': (t) => !!t })) { sleep(5); return }   // rate-limited: back off
   }
   const auth = { headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, tags: { kind: 'api' } }
   http.get(`${BASE}/api/config`, named(json, 'config'))

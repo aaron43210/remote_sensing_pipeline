@@ -15,5 +15,5 @@ One module per job, so a failure lands in one small file:
     cog.py          lon/lat window read (any UTM zone), tiled GeoTIFF write
     config.py       constants
 
-Not wired to Kafka: the new pipeline has no thermal stage yet.
+Wired to Kafka by ../thermal_service.py (raw.thermal -> preprocessed.thermal).
 """

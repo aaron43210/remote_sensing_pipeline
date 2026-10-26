@@ -19,6 +19,10 @@ by the production preprocessing (`training/README.md`).
 Full numbers: `training/artifacts/models/v1/{model_card.json,map_verification.md}`
 and the **Platform** page of the app.
 
+**On Hugging Face:** the model [aaronr43210/HydraNet-Hyperspectral](https://huggingface.co/aaronr43210/HydraNet-Hyperspectral)
+and a no-sign-in demo of real maps, [HydraNet Maps](https://huggingface.co/spaces/aaronr43210/HydraNet-Maps)
+(publish/update: [docs/SETUP_HUGGINGFACE.md](docs/SETUP_HUGGINGFACE.md)).
+
 ## Architecture
 
 ```
@@ -45,18 +49,26 @@ Batch (Dagster): imagery catalog, pre-staging, compaction, Gold tables, agreemen
 | `frontend/` | React + Leaflet SPA |
 | `pipelines/` | Dagster batch assets |
 | `infra/` | MinIO (built from source), Kafka topics, Postgres init, nginx, Prometheus, Grafana, **Terraform (AWS)** |
-| `tests/` | end-to-end API test, browser test, k6 load test |
+| `tests/` | end-to-end API test, attack tests, browser test, k6 load test, a fake Google sign-in for tests (`mockoidc/`) |
+| `docs/` | project document, AWS and Hugging Face setup guides, report and demo builders |
 
 ## Run it locally
 
 Needs Docker Desktop with ≥ 8 GB memory.
 
 ```bash
-cp .env.example .env              # fill the secrets (openssl rand -hex 32), MinIO keys, admin
+cp .env.example .env              # fill the secrets (openssl rand -hex 32), MinIO keys, Google client
 # optional: EARTHDATA_TOKEN for real EMIT (Landsat needs no account)
 docker compose --profile local up -d --build
-open http://localhost:3000        # sign in as ADMIN_EMAIL, or register
+open http://localhost:3000        # Sign in with Google (ADMIN_EMAIL becomes admin)
 ```
+
+Sign-in is **Google only**. Locally either use a real Google OAuth client (add
+`http://localhost:3000/api/auth/google/callback` as a redirect URI, put its id/secret in `.env`
+and your address in `ALLOWED_EMAILS`), or the built-in fake Google for testing:
+`OIDC_ISSUER=http://mock-oidc:9998`, `GOOGLE_CLIENT_ID=ci-client`, `GOOGLE_CLIENT_SECRET=ci-secret`,
+`ALLOWED_EMAIL_DOMAINS=example.com`, then `docker compose --profile local --profile test up -d`.
+A production gateway refuses the fake one.
 
 The first start applies the database migrations, creates the bucket and
 promotes the trained model in `training/artifacts/models/v1` (train it first:
@@ -76,10 +88,11 @@ Scale workers (up to each topic's partitions):
 
 ```bash
 pytest libs/hydra/tests libs/hs_common/tests          # parity with the owners' reference code, ONNX runtime, EMIT ortho
-(cd preprocessing && pytest tests)                     # 54 + 1 skipped
+(cd preprocessing && pytest tests)                     # 46 tests
 go vet ./... && go test ./...                          # incl. Go structs vs message schemas
+# the next ones sign in through the fake Google: run the stack with --profile test (see above)
 python tests/e2e.py --base http://localhost:3000 --jobs 3 --real-thermal
-python tests/security.py --base http://localhost:3000 --env .env   # 60+ attacks that must all be blocked
+python tests/security.py --base http://localhost:3000 --env .env   # attacks that must all be blocked
 docker run --rm --network host -v $PWD/tests:/t mcr.microsoft.com/playwright/python:v1.48.0-jammy \
   sh -c "pip install -q playwright==1.48.0 && python /t/ui_smoke.py http://localhost:3000 /tmp"
 docker run --rm --network hydranet_default -v $PWD/tests/load:/s grafana/k6:0.54.0 run /s/k6.js
@@ -95,19 +108,21 @@ Measured on one laptop (all services in Docker, 12 CPU, 8 GB):
 
 ## Security
 
-Short-lived JWTs (15 min, in memory only) + rotating HttpOnly refresh cookies with theft
-detection, per-IP and per-account brute-force limits that cannot be dodged with forged
-headers, single-use stream tickets, strict CSP and security headers, least-privilege
+Google-only sign-in (no passwords stored; PKCE, single-use state and nonce, an allow list),
+short-lived JWTs (15 min, in memory only) + rotating HttpOnly refresh cookies with theft
+detection, per-IP limits that cannot be dodged with forged headers, single-use stream tickets, strict CSP and security headers, least-privilege
 containers, audit log, and dependency/secret/image scanning in CI. Threat model,
 operations (key rotation, incident response) and trade-offs: **[SECURITY.md](SECURITY.md)**.
 
 ## Deploy to AWS (credits-friendly)
 
-`infra/terraform`: one EC2 t4g.large running this compose stack, S3 data lake,
-CloudFront (HTTPS), ECR, SSM secrets, Athena/Glue, budget alerts, night-time
-stop/start, GitHub OIDC. Then `release.yml` (multi-arch images) and
-`deploy.yml` (SSM). `S3_ENDPOINT_URL` empty = AWS; nothing else changes.
-Moving to another S3-compatible provider later: endpoint + keys in `.env`.
+Step by step, including what to get from AWS, Google and NASA: **[docs/SETUP_AWS.md](docs/SETUP_AWS.md)**.
+
+`infra/terraform`: one EC2 t4g.large (fixed Elastic IP, swap, nightly stop) running this compose stack,
+S3 data lake, CloudFront on your domain (ACM), HTTPS + secret header from CloudFront to the server,
+ECR, SSM secrets, daily Postgres and disk backups, budget alerts, optional WAF, GitHub OIDC; state in a
+private S3 bucket. Then `release.yml` (multi-arch images on a `v*` tag) and `deploy.yml` (through SSM,
+approved in the `production` environment). About $42/month, so $120 of credits last about 3 months.
 
 ## Known limitations (honest list)
 

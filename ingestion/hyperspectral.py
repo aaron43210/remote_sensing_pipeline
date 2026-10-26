@@ -121,7 +121,7 @@ def fetch_nasa(req, workdir):
     mask_url = _mask_url(g)
     if mask_url:
         mnc = _staged_granule(mask_url, g["granule_id"] + "_MASK", workdir, token)
-        mcube, mnames, _, mgeo = emit.ortho_crop(mnc, req["bbox"], var="mask")
+        mcube, mnames, _, _ = emit.ortho_crop(mnc, req["bbox"], var="mask")
         if mcube.shape[:2] == cube.shape[:2]:
             cloud = emit.cloud_from_mask(mcube, mnames)
         os.remove(mnc)

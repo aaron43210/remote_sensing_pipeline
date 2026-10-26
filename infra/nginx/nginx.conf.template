@@ -29,5 +29,12 @@ http {
     "~^on\|(?<cfip>.+):[0-9]+$" $cfip;
   }
 
+  # 1 = request may enter. No ORIGIN_SECRET (local) -> always; else the header must match it.
+  map "${ORIGIN_SECRET}|$http_x_origin_verify" $origin_ok {
+    default 0;
+    "~^\|" 1;
+    "~^(?<want>[^|]+)\|(?P=want)$" 1;
+  }
+
   include /etc/nginx/conf.d/*.conf;
 }

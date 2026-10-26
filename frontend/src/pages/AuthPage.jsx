@@ -1,62 +1,54 @@
-import { useState } from 'react'
-import { Link, useLocation, useNavigate } from 'react-router'
+import { Navigate, useLocation, useSearchParams } from 'react-router'
 import logo from '../assets/icon.png'
 import { useAuth } from '../auth'
 
-// Only same-site paths: never "//evil.example", "/\\evil", or an absolute URL (open redirect).
+// Only same-site paths: never "//evil.example", "/\evil", or an absolute URL (open redirect).
+// The gateway checks it again before redirecting.
 function safePath(p) {
-  return typeof p === 'string' && /^\/(?![\/\\])[\w\-./?=&%]*$/.test(p) ? p : '/'
+  return typeof p === 'string' && /^\/(?![/\\])[\w\-./?=&%]*$/.test(p) ? p : '/'
 }
 
-export default function AuthPage({ mode }) {
-  const auth = useAuth()
-  const navigate = useNavigate()
-  const location = useLocation()
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [error, setError] = useState(null)
-  const [busy, setBusy] = useState(false)
-  const register = mode === 'register'
+const ERRORS = {
+  cancelled: 'Sign-in was cancelled.',
+  not_allowed: 'This Google account is not allowed to use HydraNet Maps. Ask the administrator for access.',
+  unverified: 'Your Google account email is not verified.',
+  conflict: 'This email is already linked to a different Google account.',
+  expired: 'The sign-in took too long or was opened in another tab. Please try again.',
+  state: 'The sign-in could not be verified. Please try again.',
+  unavailable: 'Google sign-in is not available right now. Please try again in a minute.',
+  failed: 'Google sign-in failed. Please try again.',
+}
 
-  async function submit(e) {
-    e.preventDefault()
-    setError(null)
-    setBusy(true)
-    try {
-      if (register) await auth.register(email, password, name)
-      else await auth.login(email, password)
-      navigate(safePath(location.state?.from), { replace: true })
-    } catch (err) {
-      setError(err.message)
-    } finally {
-      setBusy(false)
-    }
-  }
+function GoogleMark() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true">
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
+      <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+    </svg>
+  )
+}
+
+export default function AuthPage() {
+  const { signedIn, ready } = useAuth()
+  const location = useLocation()
+  const [params] = useSearchParams()
+  const from = safePath(location.state?.from || params.get('from'))
+  if (ready && signedIn) return <Navigate to={from} replace />
+  const error = ERRORS[params.get('error')] || (params.get('error') ? ERRORS.failed : null)
 
   return (
     <div className="auth">
-      <form className="card" onSubmit={submit}>
+      <div className="card">
         <div className="brand" style={{ gap: 10, marginBottom: 4 }}><img src={logo} alt="HydraNet Logo" className="brand-logo large" /> HydraNet Maps</div>
-        <h1>{register ? 'Create an account' : 'Sign in'}</h1>
-        {register && (
-          <label className="field">Name
-            <input type="text" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} maxLength={100} />
-          </label>
-        )}
-        <label className="field">Email
-          <input type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-        </label>
-        <label className="field">Password{register ? ' (10 characters or more)' : ''}
-          <input type="password" autoComplete={register ? 'new-password' : 'current-password'} required minLength={register ? 10 : 8} maxLength={72}
-                 value={password} onChange={(e) => setPassword(e.target.value)} />
-        </label>
+        <h1>Sign in</h1>
         {error && <div className="notice error" role="alert">{error}</div>}
-        <button className="btn primary block" disabled={busy}>{busy ? 'Please wait…' : register ? 'Create account' : 'Sign in'}</button>
-        <p className="muted" style={{ fontSize: 13 }}>
-          {register ? <>Already registered? <Link to="/login">Sign in</Link></> : <>New here? <Link to="/register">Create an account</Link></>}
-        </p>
-      </form>
+        <a className="btn block google" href={`/api/auth/google/login?from=${encodeURIComponent(from)}`}>
+          <GoogleMark /> Sign in with Google
+        </a>
+        <p className="muted" style={{ fontSize: 13 }}>Only approved Google accounts can sign in.</p>
+      </div>
     </div>
   )
 }

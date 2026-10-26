@@ -39,6 +39,13 @@ func main() {
 		slog.Error("JWT_SECRET must be at least 32 characters (openssl rand -hex 32)")
 		os.Exit(1)
 	}
+	if err := cfg.CheckSignIn(); err != nil {
+		slog.Error(err.Error())
+		os.Exit(1)
+	}
+	if cfg.OIDCClientID == "" {
+		slog.Warn("GOOGLE_CLIENT_ID not set: nobody can sign in")
+	}
 	box, err := secretbox.New(cfg.CredentialsKey)
 	if err != nil {
 		slog.Error(err.Error())

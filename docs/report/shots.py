@@ -5,7 +5,8 @@ Screenshots of the running app for the project document (Playwright, CSP on).
         sh -c "pip install -q playwright==1.48.0 && python /w/docs/report/shots.py \
                http://localhost:3000 /w/<job_fresno.json> /w/<job_deathvalley.json> /w/docs/report/build/img"
 
-Each job JSON holds {"job": {...}, "email": ..., "pw": ...} of a finished real job.
+Each job JSON holds {"job": {...}, "email": ...} of a finished real job. Sign-in goes
+through the test IdP (docker compose --profile test), which signs in "email".
 """
 import json
 import sys
@@ -18,10 +19,10 @@ errors = []
 
 
 def login(page, info):
+    page.unroute("**/authorize?*")
+    page.route("**/authorize?*", lambda route: route.continue_(url=route.request.url + f"&login_hint={info['email']}"))
     page.goto(f"{BASE}/login")
-    page.get_by_label("Email").fill(info["email"])
-    page.get_by_label("Password").fill(info["pw"])
-    page.get_by_role("button", name="Sign in").click()
+    page.get_by_role("link", name="Sign in with Google").click()
     page.wait_for_url(lambda url: "/login" not in url, timeout=20000)
 
 

@@ -6,7 +6,6 @@ package s3x
 
 import (
 	"context"
-	"io"
 	"net/url"
 	"os"
 	"strings"
@@ -78,13 +77,4 @@ func (s *Store) Presign(ctx context.Context, key string, ttl time.Duration, file
 func (s *Store) Ping(ctx context.Context) error {
 	_, err := s.internal.BucketExists(ctx, s.Bucket)
 	return err
-}
-
-func (s *Store) GetBytes(ctx context.Context, key string) ([]byte, error) {
-	obj, err := s.internal.GetObject(ctx, s.Bucket, key, minio.GetObjectOptions{})
-	if err != nil {
-		return nil, err
-	}
-	defer obj.Close()
-	return io.ReadAll(obj)
 }

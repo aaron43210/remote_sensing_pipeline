@@ -106,8 +106,10 @@ services:
     build: {context: ./infra/minio}
     image: hydranet/minio:RELEASE.2025-10-15T17-29-55Z
     environment:
-      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:?set AWS_ACCESS_KEY_ID (MinIO root user) in .env}
-      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:?set AWS_SECRET_ACCESS_KEY in .env}
+      # local only (profile local). Not ':?' required: AWS has no MinIO and no static keys,
+      # and compose checks every service. MinIO itself refuses to start with these empty.
+      MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID:-}
+      MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY:-}
       MINIO_API_CORS_ALLOW_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:3000}
     ports: ["9000:9000", "127.0.0.1:9001:9001"]   # 9000: browser fetches presigned map URLs; console: local only
     volumes: [minio_data:/data]
@@ -119,8 +121,6 @@ services:
     environment:
       <<: *python-env
       DATABASE_URL: postgresql://${DB_USER:-spectral}:${DB_PASSWORD}@postgres:5432/hyperspectral
-      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       MODEL_VERSION: ${MODEL_VERSION:-v1}
       ALLOWED_REGION: ${ALLOWED_REGION:--124.5,32.5,-114.0,42.0}
     volumes: ["./training/artifacts:/artifacts:ro"]
@@ -154,9 +154,17 @@ services:
       REFRESH_TTL_DAYS: ${REFRESH_TTL_DAYS:-14}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       CLIENT_IP_HEADER: X-Real-IP
-      LOGIN_MAX_FAILURES: ${LOGIN_MAX_FAILURES:-10}
       PRESIGN_TTL_MIN: ${PRESIGN_TTL_MIN:-15}
-      ALLOWED_ORIGINS: ${PUBLIC_ORIGIN:-http://localhost:3000},http://localhost:5173
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:3000,http://localhost:5173}
+      # Sign-in: Google only. For tests, --profile test runs a fake Google (OIDC_ISSUER=http://mock-oidc:9998).
+      OIDC_ISSUER: ${OIDC_ISSUER:-https://accounts.google.com}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URL: ${OAUTH_REDIRECT_URL:-http://localhost:3000/api/auth/google/callback}
+      ALLOWED_EMAILS: ${ALLOWED_EMAILS:-}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      OPEN_SIGNUP: ${OPEN_SIGNUP:-false}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-}
       ALLOWED_REGION: ${ALLOWED_REGION:--124.5,32.5,-114.0,42.0}
       ALLOW_FIXTURES: ${ALLOW_FIXTURES:-false}
       EMIT_MAX_CLOUD: ${EMIT_MAX_CLOUD:-40}
@@ -255,6 +263,7 @@ services:
       TRUST_CLOUDFRONT: ${TRUST_CLOUDFRONT:-off}
       STORAGE_ORIGIN: ${STORAGE_ORIGIN:-http://localhost:9000}
       CSP_EXTRA: ${CSP_EXTRA:-}
+      ORIGIN_SECRET: ${ORIGIN_SECRET:-}      # AWS: only requests carrying CloudFront's secret header get in
     cap_drop: [ALL]
     cap_add: [CHOWN, SETUID, SETGID, NET_BIND_SERVICE, DAC_OVERRIDE]
     depends_on: [api_gateway]
@@ -263,6 +272,19 @@ services:
       interval: 15s
       timeout: 3s
     deploy: {resources: {limits: {memory: 128m}}}
+
+  # ── Test only: a fake Google sign-in (never in production: the gateway refuses it there)
+  mock-oidc:
+    <<: [*restart, *locked]
+    profiles: [test]
+    build: {context: ., dockerfile: tests/mockoidc/Dockerfile}
+    image: hydranet/mockoidc:${TAG:-dev}
+    environment:
+      ISSUER: http://mock-oidc:9998
+      PUBLIC_URL: http://localhost:9998
+      CLIENT_ID: ${GOOGLE_CLIENT_ID:-ci-client}
+      CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-ci-secret}
+    ports: ["127.0.0.1:9998:9998"]
 
   # ── Batch (Dagster) ─────────────────────────────────────────────────────────
   dagster:

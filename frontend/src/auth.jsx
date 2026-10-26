@@ -17,8 +17,6 @@ export function AuthProvider({ children }) {
     user: session?.user || null,
     signedIn: !!session,
     ready,
-    async login(email, password) { setSession(await api.login(email, password)) },
-    async register(email, password, name) { setSession(await api.register(email, password, name)) },
     async logout() { await api.logout().catch(() => {}); setSession(null) },
   }), [session, ready])
 

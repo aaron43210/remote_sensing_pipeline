@@ -1,0 +1,6 @@
+# Copy to backend.hcl (gitignored), then: terraform init -backend-config=backend.hcl
+bucket       = "CHANGE_ME"   # the state bucket made by bootstrap/ (output state_bucket)
+key          = "hydranet/prod.tfstate"
+region       = "us-west-2"
+encrypt      = true
+use_lockfile = true          # S3-native state locking (Terraform >= 1.10)

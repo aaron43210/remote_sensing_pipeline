@@ -3,7 +3,7 @@ End-to-end test against a running stack, through the same public API the UI uses
 
     python tests/e2e.py --base http://localhost:3000 [--jobs 3] [--real-thermal]
 
-Checks: register/login, validation errors, job submission with an idempotency
+Checks: Google sign-in (test IdP), validation errors, job submission with an idempotency
 key, live status to a final state, every layer's PNG and COG downloadable via
 its presigned URL, shadow verification present and within the gates, result
 reuse for an identical request, cancel, auth isolation between users, and
@@ -18,6 +18,8 @@ import sys
 import time
 import urllib.error
 import urllib.request
+
+from oidc_login import login
 
 FIXTURE_BOXES = [[-119.85, 36.70, -119.80, 36.75], [-119.40, 36.15, -119.35, 36.20],
                  [-121.05, 37.60, -121.00, 37.65], [-119.10, 35.35, -119.05, 35.40],
@@ -52,10 +54,8 @@ def check(cond, msg):
 
 
 def user(base):
-    email = f"e2e-{secrets.token_hex(4)}@example.com"
-    _, d = call(base, "POST", "/api/auth/register", body={"email": email, "password": "correct horse 42", "name": "E2E"},
-                expect=201)
-    return d["token"]
+    _, token, _ = login(base, f"e2e-{secrets.token_hex(4)}@example.com")
+    return token
 
 
 def wait(base, token, job_id, timeout):
@@ -117,8 +117,9 @@ def main():
     call(base, "GET", "/api/me", tok, expect=200)
     code, _ = call(base, "GET", "/api/jobs", None)
     check(code == 401, "API refuses requests without a token")
-    code, _ = call(base, "POST", "/api/auth/login", body={"email": "nobody@example.com", "password": "wrongpass1"})
-    check(code == 401, "wrong credentials rejected")
+    for path in ("/api/auth/login", "/api/auth/register"):
+        code, _ = call(base, "POST", path, body={"email": "nobody@example.com", "password": "wrongpass1"})
+        check(code == 404, f"password sign-in does not exist ({path} -> {code})")
 
     print("== EMIT coverage (map layer)")
     code, _ = call(base, "GET", "/api/coverage", None)

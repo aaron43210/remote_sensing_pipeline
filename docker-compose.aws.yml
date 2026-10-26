@@ -1,27 +1,74 @@
 # AWS override: S3 instead of MinIO, CloudWatch logs, credentials from the
-# EC2 instance role. Used as:
+# EC2 instance role, HTTPS origin for CloudFront. Used as:
 #   docker compose -f docker-compose.yml -f docker-compose.aws.yml up -d
 # with an .env rendered from SSM Parameter Store by scripts/deploy.sh.
+#
+# Sized for one t4g.large (8 GB + swap): one replica per worker, so the worst
+# case (ingest + preprocess + inference at once) stays inside memory.
+# Network: services without AWS needs get fixed addresses in 10.88.0.0/24, which
+# the host firewall cuts off from the instance metadata service (user_data.sh);
+# everything else is allocated from 10.88.1.0/24.
 x-aws-logging: &aws-logging
   logging:
     driver: awslogs
     options:
       awslogs-region: ${S3_REGION:-us-west-2}
       awslogs-group: /hydranet/${ENV:-prod}
-      awslogs-create-group: "true"
       tag: "{{.Name}}"
 
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: 10.88.0.0/16
+          ip_range: 10.88.1.0/24
+
 services:
-  api_gateway: {<<: *aws-logging, image: "${REGISTRY}/hydranet/api_gateway:${TAG}"}
+  api_gateway:
+    <<: *aws-logging
+    image: "${REGISTRY}/hydranet/api_gateway:${TAG}"
+    deploy: {replicas: 1, resources: {limits: {memory: 256m}}}
   orchestrator: {<<: *aws-logging, image: "${REGISTRY}/hydranet/orchestrator:${TAG}"}
-  ingestion: {<<: *aws-logging, image: "${REGISTRY}/hydranet/ingestion:${TAG}"}
-  preprocessing: {<<: *aws-logging, image: "${REGISTRY}/hydranet/preprocessing:${TAG}"}
+  ingestion:
+    <<: *aws-logging
+    image: "${REGISTRY}/hydranet/ingestion:${TAG}"
+    deploy: {replicas: 1, resources: {limits: {memory: 3g}}}
+  preprocessing:
+    <<: *aws-logging
+    image: "${REGISTRY}/hydranet/preprocessing:${TAG}"
+    deploy: {replicas: 1, resources: {limits: {memory: 2g}}}
   preprocessing-thermal: {<<: *aws-logging, image: "${REGISTRY}/hydranet/preprocessing:${TAG}"}
-  ml_inference: {<<: *aws-logging, image: "${REGISTRY}/hydranet/ml_inference:${TAG}"}
+  ml_inference:
+    <<: *aws-logging
+    image: "${REGISTRY}/hydranet/ml_inference:${TAG}"
+    deploy: {replicas: 1, resources: {limits: {memory: 2g}}}
   event_sink: {<<: *aws-logging, image: "${REGISTRY}/hydranet/event_sink:${TAG}"}
-  frontend: {<<: *aws-logging, image: "${REGISTRY}/hydranet/frontend:${TAG}", ports: ["80:80"]}
+  frontend:
+    <<: *aws-logging
+    image: "${REGISTRY}/hydranet/frontend:${TAG}"
+    ports: !override ["443:443"]
+    environment:
+      NGINX_ENVSUBST_TEMPLATE_DIR: /etc/nginx/templates-aws
+      ORIGIN_HOST: ${ORIGIN_HOST}
+    volumes: ["/etc/letsencrypt:/etc/letsencrypt:ro"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/healthz"]
+    networks:
+      default: {ipv4_address: 10.88.0.10}
   tools: {image: "${REGISTRY}/hydranet/tools:${TAG}", volumes: []}
   dagster: {<<: *aws-logging, image: "${REGISTRY}/hydranet/pipelines:${TAG}"}
-  kafka: {<<: *aws-logging}
-  postgres: {<<: *aws-logging}
-  redis: {<<: *aws-logging}
+  kafka:
+    <<: *aws-logging
+    environment:
+      KAFKA_HEAP_OPTS: "-Xms256m -Xmx768m"
+    deploy: {resources: {limits: {memory: 1g}}}
+    networks:
+      default: {ipv4_address: 10.88.0.11}
+  postgres:
+    <<: *aws-logging
+    networks:
+      default: {ipv4_address: 10.88.0.12}
+  redis:
+    <<: *aws-logging
+    networks:
+      default: {ipv4_address: 10.88.0.13}

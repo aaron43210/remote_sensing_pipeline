@@ -1,5 +1,12 @@
-name        = "yourname"          # bucket = hyperspectral-yourname-prod
-alert_email = "you@example.com"
-admin_email = "you@example.com"
-github_repo = "aaron43210/remote_sensing_pipeline"
-# earthdata_token = "..."          # or set later in SSM: /hydranet/prod/EARTHDATA_TOKEN
+# Copy to terraform.tfvars (gitignored) and fill in every CHANGE_ME.
+name                  = "CHANGE_ME"             # bucket = hyperspectral-<name>-prod (globally unique)
+domain_name           = "CHANGE_ME"             # e.g. maps.example.com
+route53_zone_name     = "CHANGE_ME"             # e.g. example.com (hosted zone must exist in Route 53)
+alert_email           = "CHANGE_ME"             # budget alerts + Let's Encrypt notices
+admin_email           = "CHANGE_ME"             # your Google account: becomes admin
+allowed_emails        = []                      # e.g. ["friend@gmail.com"]
+allowed_email_domains = []                      # e.g. ["yourlab.org"] (Google Workspace) or ["gmail.com"]
+github_repo           = "aaron43210/remote_sensing_pipeline"
+# instance_type     = "t4g.large"               # t4g.xlarge (16 GB) if big scenes run out of memory
+# office_hours_only = true                      # stop 22:00-07:00 Pacific to save credits
+# budget_usd        = 45
