@@ -1,9 +1,9 @@
-output "site_url" { value = "https://${var.domain_name}" }
+output "site_url" { value = local.site_origin }
 output "google_oauth_settings" {
   description = "Paste into Google Cloud Console -> Credentials -> your OAuth client"
   value = {
-    authorized_javascript_origin = "https://${var.domain_name}"
-    authorized_redirect_uri      = "https://${var.domain_name}/api/auth/google/callback"
+    authorized_javascript_origin = local.site_origin
+    authorized_redirect_uri      = "${local.site_origin}/api/auth/google/callback"
   }
 }
 output "bucket" { value = aws_s3_bucket.lake.bucket }

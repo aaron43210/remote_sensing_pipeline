@@ -1,9 +1,9 @@
 # Deploy HydraNet Maps to AWS
 
-This guide takes you from an empty AWS account to the live site at `https://<your domain>`.
-You do the account steps once. After that, every release is two GitHub clicks.
+This guide takes you from an empty AWS account to the live site.
+**You do not need to buy a domain:** AWS CloudFront includes a free HTTPS domain (`https://*.cloudfront.net`) with Amazon SSL at $0 cost (Option 1). If you already have a domain, you can optionally connect it (Option 2).
 
-Plan for about 2 hours the first time. Most of that is waiting for DNS and certificates.
+Plan for about 30–45 minutes the first time.
 
 ---
 
@@ -13,15 +13,15 @@ Write each value down as you get it. Section 8 says where each one goes.
 
 | # | What | Where you get it | Example |
 |---|---|---|---|
-| A | Your domain | Any registrar (section 2) | `maps.example.com` |
-| B | Route 53 zone name | Route 53 (section 2) | `example.com` |
+| A | Your domain | CloudFront default (Option 1, $0) OR registrar (Option 2) | `d123.cloudfront.net` or `maps.example.com` |
+| B | Route 53 zone name | Leave empty for Option 1, Route 53 for Option 2 | `""` or `example.com` |
 | C | Google OAuth **Client ID** | Google Cloud Console (section 3) | `1234-abc.apps.googleusercontent.com` |
 | D | Google OAuth **Client secret** | Google Cloud Console (section 3) | `GOCSPX-...` (secret) |
 | E | Your Google e-mail (becomes admin) | You | `you@gmail.com` |
 | F | Who else may sign in | You | `friend@gmail.com`, or a Workspace domain `yourlab.org` |
 | G | NASA Earthdata token (optional) | urs.earthdata.nasa.gov (section 4) | long token (secret) |
 | H | A unique short name | You | `aaron` (makes bucket `hyperspectral-aaron-prod`) |
-| I | Alert e-mail | You | budget and certificate notices |
+| I | Alert e-mail | You | budget and operational notices |
 
 Secrets **D** and **G** go into AWS SSM Parameter Store only. Never put them in git, in
 `terraform.tfvars`, in chat, or in a screenshot.
@@ -50,23 +50,27 @@ aws sts get-caller-identity             # check: shows your admin user, not root
 
 ---
 
-## 2. Domain + Route 53 (10 min, then up to 1 h of DNS waiting)
+## 2. Domain setup: Option 1 ($0, Recommended) or Option 2
 
-Google sign-in and HTTPS need a real domain.
+### Option 1: Free CloudFront Domain ($0, Recommended)
+**No domain purchase and no Route 53 needed.**
+- In `terraform.tfvars`:
+  ```hcl
+  domain_name       = ""
+  route53_zone_name = ""
+  ```
+- AWS CloudFront automatically generates a secure `https://<distribution_id>.cloudfront.net` domain with free Amazon SSL.
+- You will obtain your live URL directly from `terraform output site_url` in section 6.
 
-1. Buy a domain at any registrar (about $10–15 a year). AWS credits usually **cannot** pay for domain
-   registration, so Cloudflare, Namecheap or Porkbun are as good as Route 53 here.
-2. In AWS: *Route 53* → *Hosted zones* → *Create hosted zone*: name = your domain (for example `example.com`),
-   type **Public**. This costs $0.50 a month.
-3. Copy the 4 **NS** records of the new zone into your registrar's "custom nameservers".
-4. Wait until this prints the AWS nameservers:
-   ```bash
-   dig +short NS example.com
-   ```
-
-You can serve the site on the bare domain (`example.com`) or a sub-domain (`maps.example.com`).
-Either way the zone is `example.com`.
-→ values **A** (site domain) and **B** (zone name).
+### Option 2: Custom Domain (Optional)
+If you already own a domain and want to use it:
+1. In AWS: *Route 53* → *Hosted zones* → *Create hosted zone*: name = your domain (e.g. `example.com`), type **Public** ($0.50/mo).
+2. Point your registrar nameservers to AWS Route 53 NS records.
+3. In `terraform.tfvars`:
+  ```hcl
+  domain_name       = "maps.example.com"
+  route53_zone_name = "example.com"
+  ```
 
 ---
 
@@ -82,11 +86,15 @@ Sign-in is **Google only**: the platform stores no passwords.
      Add yourself and the people in **F**, or click *Publish app*.
      HydraNet's own allow list still applies either way.
 3. *Credentials* → *Create credentials* → *OAuth client ID* → **Web application**:
-   - Authorized JavaScript origins: `https://<A>`
-   - Authorized redirect URIs: `https://<A>/api/auth/google/callback`
-   - To also sign in locally, add `http://localhost:3000` and
-     `http://localhost:3000/api/auth/google/callback`.
+   - Authorized JavaScript origins:
+     - Local: `http://localhost:3000`
+     - Production: `https://<A>` (if using Option 1, paste the CloudFront domain from `terraform output site_url`)
+   - Authorized redirect URIs:
+     - Local: `http://localhost:3000/api/auth/google/callback`
+     - Production: `https://<A>/api/auth/google/callback`
 4. Copy the **Client ID** (**C**) and **Client secret** (**D**).
+
+> If you are setting up AWS with Option 1, you can create the Google OAuth Client initially with localhost origins, run `terraform apply` (section 6), and then paste your generated CloudFront domain into Google Cloud Console.
 
 > **Your old client secret has leaked.** The `client_secret_859615018936-...json` file was pasted into a chat.
 > Open that client → *Add secret* → use the new one → **delete the old secret**.

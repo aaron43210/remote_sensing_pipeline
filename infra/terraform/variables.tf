@@ -42,16 +42,18 @@ variable "admin_email" {
   type        = string
 }
 variable "domain_name" {
-  description = "Site domain, e.g. maps.example.com (required: Google sign-in and HTTPS need a real domain)"
+  description = "Site domain, e.g. maps.example.com. If empty, AWS CloudFront's free default domain (*.cloudfront.net) is used."
   type        = string
+  default     = ""
   validation {
-    condition     = can(regex("^[a-z0-9.-]+\\.[a-z]{2,}$", var.domain_name))
-    error_message = "Set domain_name to your domain, e.g. maps.example.com."
+    condition     = var.domain_name == "" || can(regex("^[a-z0-9.-]+\\.[a-z]{2,}$", var.domain_name))
+    error_message = "domain_name must be empty or a valid domain, e.g. maps.example.com."
   }
 }
 variable "route53_zone_name" {
-  description = "Route 53 public hosted zone that holds domain_name, e.g. example.com"
+  description = "Route 53 public hosted zone that holds domain_name, e.g. example.com. Leave empty if using CloudFront's default domain."
   type        = string
+  default     = ""
 }
 variable "allowed_emails" {
   description = "Google accounts allowed to sign in (besides admin_email)"

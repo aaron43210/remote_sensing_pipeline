@@ -1,5 +1,13 @@
-# Local / CI: plain HTTP on port 80 (published as :3000).
+# Plain HTTP on port 80
 server {
   listen 80;
   include /etc/nginx/site.inc;
+}
+
+# Container health check only: not published
+server {
+  listen 8080;
+  allow 127.0.0.1;
+  deny all;
+  location = /healthz { return 200 "ok\n"; }
 }
