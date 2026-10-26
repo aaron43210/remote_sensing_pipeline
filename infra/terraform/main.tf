@@ -157,6 +157,7 @@ resource "aws_ssm_parameter" "config" {
     ADMIN_EMAIL           = var.admin_email
     ALLOWED_EMAILS        = join(",", var.allowed_emails)
     ALLOWED_EMAIL_DOMAINS = join(",", var.allowed_email_domains)
+    OPEN_SIGNUP           = tostring(var.open_signup)
     REGISTRY              = "${data.aws_caller_identity.me.account_id}.dkr.ecr.${var.region}.amazonaws.com"
   }
   name  = "/hydranet/${var.env}/${each.key}"

@@ -9,7 +9,8 @@ route53_zone_name     = ""
 alert_email           = "CHANGE_ME"             # budget alerts
 admin_email           = "CHANGE_ME"             # your Google account: becomes admin
 allowed_emails        = []                      # e.g. ["friend@gmail.com"]
-allowed_email_domains = []                      # e.g. ["yourlab.org"] (Google Workspace) or ["gmail.com"]
+allowed_email_domains = []                          # e.g. ["yourlab.org"] (Google Workspace) or ["gmail.com"]
+# open_signup         = false                     # true = any Google account may sign in
 github_repo           = "aaron43210/remote_sensing_pipeline"
 # github_repo_ids     = "owner@ownerId/repo@repoId"  # optional: GitHub's immutable form, from CloudTrail (see SETUP_AWS.md)
 # instance_type     = "m7i-flex.large"          # 8 GB x86; the Free plan allows only flex/micro/small types

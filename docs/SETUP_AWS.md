@@ -96,10 +96,10 @@ Sign-in is **Google only**: the platform stores no passwords.
 
 > If you are setting up AWS with Option 1, you can create the Google OAuth Client initially with localhost origins, run `terraform apply` (section 6), and then paste your generated CloudFront domain into Google Cloud Console.
 
-> **Your old client secret has leaked.** The `client_secret_859615018936-...json` file was pasted into a chat.
-> Open that client → *Add secret* → use the new one → **delete the old secret**.
-> Delete the `client_secret_*.json` files from `~/Downloads` once you have stored the values somewhere safe,
-> for example a password manager.
+> **Keep the client secret secret.** If it was ever pasted into a chat, an e-mail or a commit, open the client →
+> *Add secret* → put the new one in SSM (section 7) → **delete the old secret**.
+> Delete downloaded `client_secret_*.json` files once the values are stored somewhere safe, for example a
+> password manager (`.gitignore` also blocks them).
 
 ---
 

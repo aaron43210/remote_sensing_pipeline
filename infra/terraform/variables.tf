@@ -51,7 +51,7 @@ variable "run_days" {
   default     = "*"
 }
 variable "github_repo_ids" {
-  description = "GitHub's immutable form owner@ownerId/repo@repoId (seen in CloudTrail AssumeRoleWithWebIdentity), e.g. aaron43210@225593939/remote_sensing_pipeline@1357258149"
+  description = "GitHub's immutable form owner@ownerId/repo@repoId (seen in CloudTrail AssumeRoleWithWebIdentity), e.g. owner@12345/repo@67890"
   type        = string
   default     = ""
 }
@@ -82,6 +82,11 @@ variable "allowed_email_domains" {
   description = "Google Workspace domains (or gmail.com) whose accounts may sign in"
   type        = list(string)
   default     = []
+}
+variable "open_signup" {
+  description = "true = any verified Google account may sign in (the server is a fixed cost; each user may run 3 jobs at once)"
+  type        = bool
+  default     = false
 }
 variable "log_retention_days" {
   type    = number
