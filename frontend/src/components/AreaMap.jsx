@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import { GeoJSON, ImageOverlay, MapContainer, Polygon, Rectangle, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
+import { clampBox, finishBox } from '../lib/draw'
+import { COARSE, useMediaQuery } from '../lib/useMediaQuery'
 
 const BASEMAPS = {
   imagery: {
@@ -16,42 +18,57 @@ const BASEMAPS = {
 
 const toBounds = (b) => [[b[1], b[0]], [b[3], b[2]]]
 
-function clampBox(start, end, maxDeg) {
-  const lat = start.lat + Math.sign(end.lat - start.lat) * Math.min(Math.abs(end.lat - start.lat), maxDeg)
-  const lng = start.lng + Math.sign(end.lng - start.lng) * Math.min(Math.abs(end.lng - start.lng), maxDeg)
-  return [Math.min(start.lng, lng), Math.min(start.lat, lat), Math.max(start.lng, lng), Math.max(start.lat, lat)]
-}
-
+// Pointer Events: one path for mouse, pen and finger. While drawing, the map
+// cannot pan or box-zoom and the browser does not scroll (touch-action: none),
+// so a one-finger drag draws instead of panning.
 function DrawController({ drawing, maxDeg, onDraft, onDone, onCancel, onInspect }) {
-  const start = useRef(null)
   const map = useMapEvents({
-    mousedown(e) {
-      if (!drawing) return
-      start.current = e.latlng
-      map.dragging.disable()
-    },
-    mousemove(e) {
-      if (drawing && start.current) onDraft(clampBox(start.current, e.latlng, maxDeg))
-    },
-    mouseup(e) {
-      if (!drawing || !start.current) return
-      const box = clampBox(start.current, e.latlng, maxDeg)
-      start.current = null
-      map.dragging.enable()
-      if (box[2] - box[0] > 0.002 && box[3] - box[1] > 0.002) onDone(box)
-      else onDraft(null)
-    },
     click(e) {
       if (!drawing && onInspect) onInspect(e.latlng.lat, e.latlng.lng)
     },
   })
   useEffect(() => {
+    if (!drawing) return undefined
     const el = map.getContainer()
-    el.style.cursor = drawing ? 'crosshair' : ''
-    const key = (ev) => { if (ev.key === 'Escape' && drawing) { start.current = null; map.dragging.enable(); onCancel() } }
+    let start = null
+    map.dragging.disable()
+    map.boxZoom.disable()
+    el.style.touchAction = 'none'
+    el.style.cursor = 'crosshair'
+    const at = (ev) => map.mouseEventToLatLng(ev)
+    const down = (ev) => {
+      if (ev.button > 0) return                     // left button, pen or finger only
+      start = at(ev)
+      el.setPointerCapture?.(ev.pointerId)
+      ev.preventDefault()
+    }
+    const move = (ev) => { if (start) onDraft(clampBox(start, at(ev), maxDeg)) }
+    const up = (ev) => {
+      if (!start) return
+      const box = finishBox(start, at(ev), maxDeg)
+      start = null
+      if (box) onDone(box)
+      else onDraft(null)
+    }
+    const cancel = () => { start = null; onDraft(null) }
+    const key = (ev) => { if (ev.key === 'Escape') { start = null; onCancel() } }
+    el.addEventListener('pointerdown', down)
+    el.addEventListener('pointermove', move)
+    el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', cancel)
     window.addEventListener('keydown', key)
-    return () => window.removeEventListener('keydown', key)
-  }, [drawing, map, onCancel])
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      el.removeEventListener('pointermove', move)
+      el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', cancel)
+      window.removeEventListener('keydown', key)
+      map.dragging.enable()
+      map.boxZoom.enable()
+      el.style.touchAction = ''
+      el.style.cursor = ''
+    }
+  }, [drawing, map, maxDeg, onDraft, onDone, onCancel])
   return null
 }
 
@@ -119,6 +136,9 @@ export default function AreaMap({ region, maxDeg, bbox, onBbox, drawing, setDraw
   const staged = useMemo(() => (coverage
     ? { type: 'FeatureCollection', features: coverage.features.filter((f) => f.properties.staged) } : null), [coverage])
   const center = [(region[1] + region[3]) / 2, (region[0] + region[2]) / 2]
+  const touch = useMediaQuery(COARSE)
+  const stopDrawing = useCallback(() => { setDraft(null); setDrawing(false) }, [setDrawing])
+  const finishDrawing = useCallback((b) => { setDraft(null); setDrawing(false); onBbox(b) }, [setDrawing, onBbox])
   return (
     <div className="mapwrap" style={{ height: '100%' }}>
       <MapContainer center={center} zoom={7} minZoom={6} maxZoom={17} maxBounds={toBounds(region)}
@@ -140,18 +160,20 @@ export default function AreaMap({ region, maxDeg, bbox, onBbox, drawing, setDraw
         {draft && <Rectangle bounds={toBounds(draft)} pathOptions={{ color: '#ffffff', weight: 2, dashArray: '6 4', fillOpacity: 0.1 }} />}
         {marker && <Rectangle bounds={[[marker[0] - 0.0004, marker[1] - 0.0004], [marker[0] + 0.0004, marker[1] + 0.0004]]}
                               pathOptions={{ color: '#ffffff', weight: 2, fill: false }} />}
-        <DrawController drawing={drawing} maxDeg={maxDeg} onDraft={setDraft}
-                        onDone={(b) => { setDraft(null); setDrawing(false); onBbox(b) }}
-                        onCancel={() => { setDraft(null); setDrawing(false) }} onInspect={onInspect} />
+        <DrawController drawing={drawing} maxDeg={maxDeg} onDraft={setDraft} onDone={finishDrawing}
+                        onCancel={stopDrawing} onInspect={onInspect} />
         <FitTo bbox={bbox} />
       </MapContainer>
       <div className="map-tools">
+        {drawing && <button className="btn small" onClick={stopDrawing}>Cancel</button>}
         <button className="btn small" onClick={() => setBase(base === 'imagery' ? 'streets' : 'imagery')}>
           {base === 'imagery' ? 'Streets' : 'Imagery'}
         </button>
       </div>
       {coverage && <CoverageLegend coverage={coverage} show={showCoverage} setShow={setShowCoverage} />}
-      {drawing && <div className="map-hint">Drag a box (up to {maxDeg}° per side). Esc cancels.</div>}
+      {drawing && <div className="map-hint">{touch
+        ? `Drag with one finger to draw a box (up to ${maxDeg}° per side).`
+        : `Drag a box (up to ${maxDeg}° per side). Esc cancels.`}</div>}
       {children}
     </div>
   )
