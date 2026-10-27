@@ -19,8 +19,11 @@ errors = []
 
 
 def login(page, info):
-    page.unroute("**/authorize?*")
-    page.route("**/authorize?*", lambda route: route.continue_(url=route.request.url + f"&login_hint={info['email']}"))
+    def hint(route):   # Playwright does not route redirect hops: add login_hint to the gateway's redirect itself
+        resp = route.fetch(max_redirects=0)
+        route.fulfill(response=resp, headers={**resp.headers, "location": resp.headers["location"] + f"&login_hint={info['email']}"})
+    page.unroute("**/api/auth/google/login*")
+    page.route("**/api/auth/google/login*", hint)
     page.goto(f"{BASE}/login")
     page.get_by_role("link", name="Sign in with Google").click()
     page.wait_for_url(lambda url: "/login" not in url, timeout=20000)
