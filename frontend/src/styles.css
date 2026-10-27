@@ -188,13 +188,28 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
 @media (max-width: 640px) {
   .topbar { gap: 8px; padding: 0 10px; }
   .nav a .label, .topbar .label, .topbar .user, .hide-phone { display: none; }
-  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }   /* until the sheet (Task 6) */
-  .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
+  /* the map fills the screen; the panel is a bottom sheet over it (Workspace sets .sheet) */
+  .workspace { display: block; position: relative; }
+  .workspace > .mapwrap { position: absolute; inset: 0; }
+  .sidebar.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 600; max-height: 70dvh;
+    border-right: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; padding-top: 0;
+    padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 24px rgba(11, 11, 11, 0.16);
+    transform: translateY(calc(100% - var(--sheet-peek))); transition: transform 0.2s ease; }
+  .sidebar.sheet.open { transform: none; }
+  .sheet-handle { position: sticky; top: 0; z-index: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    margin: 0 -16px; width: calc(100% + 32px); min-height: 44px; padding: 8px 16px; border: 0; border-radius: 14px 14px 0 0;
+    background: var(--surface-1); color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
+  .sheet-handle .grip { width: 36px; height: 4px; border-radius: 2px; background: var(--axis); }
   .grid4 { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 400px) { .brand-name { display: none; } }
 @media (min-width: 641px) and (max-width: 1024px) {
   .workspace { grid-template-columns: 340px 1fr; }
+}
+/* landscape phones: too short for a sheet, so panel beside the map (after the width bands: it wins) */
+@media (max-height: 500px) and (orientation: landscape) {
+  .workspace { display: grid; grid-template-columns: 300px 1fr; }
+  .workspace > .mapwrap { position: relative; inset: auto; }
 }
 @media (pointer: coarse) {
   .btn, .tabs button, .chip, .nav a, select,
