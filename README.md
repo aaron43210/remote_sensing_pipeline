@@ -95,6 +95,9 @@ python tests/e2e.py --base http://localhost:3000 --jobs 3 --real-thermal
 python tests/security.py --base http://localhost:3000 --env .env   # attacks that must all be blocked
 docker run --rm --network host -v $PWD/tests:/t mcr.microsoft.com/playwright/python:v1.48.0-jammy \
   sh -c "pip install -q playwright==1.48.0 && python /t/ui_smoke.py http://localhost:3000 /tmp"
+# 8 screen sizes, touch and mouse: layout, touch drawing, overflow
+docker run --rm --network host -v $PWD/tests:/t mcr.microsoft.com/playwright/python:v1.48.0-jammy \
+  sh -c "pip install -q playwright==1.48.0 && python /t/ui_responsive.py http://localhost:3000"
 docker run --rm --network hydranet_default -v $PWD/tests/load:/s grafana/k6:0.54.0 run /s/k6.js
 ```
 
