@@ -111,6 +111,45 @@ def open_app(page, dev):
         return False
 
 
+# ── device checks (run once per device, after the page checks) ───────────────
+def touch_drag(page, x0, y0, x1, y1, steps=6):
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
+    for i in range(1, steps + 1):
+        x, y = x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
+        page.wait_for_timeout(30)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.detach()
+
+
+def touch_draw_makes_box(page, dev, job):
+    if dev["name"] not in ("390x844", "768x1024", "1440x900"):
+        return
+    go(page, "/", job)
+    page.get_by_role("button", name="Draw area").click()
+    page.wait_for_timeout(300)
+    m = page.locator(".leaflet-container")
+    m.scroll_into_view_if_needed()
+    b = m.bounding_box()
+    summary = page.locator("form p.secondary.num", has_text="km²")   # the form's box summary
+    text = lambda: summary.first.inner_text() if summary.count() else ""
+    had_box = text()
+    before = page.evaluate("document.querySelector('.leaflet-map-pane').style.transform")
+    pts = (b["x"] + b["width"] * 0.4, b["y"] + b["height"] * 0.4, b["x"] + b["width"] * 0.6, b["y"] + b["height"] * 0.6)
+    if dev["touch"]:
+        touch_drag(page, *pts)
+    else:   # desktop: the same drawing with a mouse must keep working
+        page.mouse.move(pts[0], pts[1]); page.mouse.down(); page.mouse.move(pts[2], pts[3], steps=6); page.mouse.up()
+    page.wait_for_timeout(500)
+    after = page.evaluate("document.querySelector('.leaflet-map-pane').style.transform")
+    boxed = text() not in ("", had_box)
+    ok(boxed and before == after, f"touch_draw_makes_box[{dev['name']}]: new box drawn {boxed}, map panned {before != after}")
+
+
+DEVICE_CHECKS = [touch_draw_makes_box]
+
+
 def go(page, route, job):
     """Move inside the app by tapping its own links (no full page load)."""
     if route == "/":
@@ -191,6 +230,11 @@ def main():
                     continue
                 for check in ROUTE_CHECKS:
                     check(page, dev, route)
+            for check in DEVICE_CHECKS:
+                try:
+                    check(page, dev, job)
+                except Exception as e:
+                    ok(False, f"{check.__name__}[{dev['name']}]: {str(e).splitlines()[0][:120]}")
             ctx.close()
         browser.close()
     print(f"\n{'PASSED' if not failures else 'FAILED'}: {len(failures)} failure(s)")
