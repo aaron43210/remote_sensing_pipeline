@@ -216,6 +216,13 @@ def sheet_toggles(page, dev, job):
     h = rect(page, ".sheet-handle")
     ok(map_visible >= 0.55 * H and 0 <= h["top"] and h["bottom"] <= H,
        f"sheet_toggles[{dev['name']}] closed: map shows {map_visible:.0f}px of {H}, handle visible {h['bottom'] <= H}")
+    # nothing of the map (attribution, controls) may sit on top of the handle, and the attribution stays visible
+    on_top = page.evaluate("""(() => { const h = document.querySelector('.sheet-handle').getBoundingClientRect();
+        const pts = [[h.left + 8, h.top + h.height / 2], [h.left + h.width / 2, h.top + h.height / 2], [h.right - 8, h.top + h.height / 2]];
+        return pts.every(([x, y]) => document.elementFromPoint(x, y)?.closest('.sheet-handle')) })()""")
+    att = rect(page, ".leaflet-control-attribution")
+    ok(on_top and att and att["bottom"] <= h["top"] + 0.5,
+       f"sheet_above_map_controls[{dev['name']}]: handle on top {on_top}, attribution above the sheet {att and att['bottom'] <= h['top'] + 0.5}")
     handle.tap(); page.wait_for_timeout(400)
     btn = page.get_by_role("button", name="Make maps")
     btn.scroll_into_view_if_needed()

@@ -193,7 +193,7 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
   /* the map fills the screen; the panel is a bottom sheet over it (Workspace sets .sheet) */
   .workspace { display: block; position: relative; }
   .workspace > .mapwrap { position: absolute; inset: 0; }
-  .sidebar.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 600; max-height: 70dvh;
+  .sidebar.sheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 1100; max-height: 70dvh;   /* above Leaflet's controls (1000) */
     border-right: 0; border-top: 1px solid var(--border); border-radius: 14px 14px 0 0; padding-top: 0;
     padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-shadow: 0 -4px 24px rgba(11, 11, 11, 0.16);
     transform: translateY(calc(100% - var(--sheet-peek))); transition: transform 0.2s ease; }
@@ -206,6 +206,7 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
   .inspector { left: 8px; right: 8px; width: auto; bottom: calc(var(--sheet-peek) + 8px); max-height: 40dvh; }
   .coverage-legend { left: 8px; right: 8px; max-width: none; bottom: calc(var(--sheet-peek) + 8px); }
   .map-hint { max-width: calc(100% - 24px); white-space: normal; text-align: center; }
+  .workspace .leaflet-bottom { bottom: var(--sheet-peek); }   /* attribution stays visible above the closed sheet */
   .grid4 { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 400px) { .brand-name { display: none; } }
