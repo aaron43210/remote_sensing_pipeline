@@ -22,19 +22,19 @@ export default function History() {
         {!jobs ? <p className="muted">Loading…</p> : jobs.length === 0 ? (
           <p className="muted">No jobs yet. <Link to="/">Map your first area</Link>.</p>
         ) : (
-          <table className="data">
-            <thead><tr><th>Submitted</th><th>Area</th><th>Maps</th><th>Source</th><th>Status</th><th /></tr></thead>
+          <div className="table-wrap"><table className="data">
+            <thead><tr><th>Submitted</th><th className="hide-phone">Area</th><th>Maps</th><th className="hide-phone">Source</th><th>Status</th><th /></tr></thead>
             <tbody>{jobs.map((j) => (
               <tr key={j.job_id}>
                 <td>{when(j.created_at)}</td>
-                <td className="num secondary" style={{ fontSize: 12 }}>{bboxLabel(j.bbox)}</td>
+                <td className="num secondary hide-phone" style={{ fontSize: 12 }}>{bboxLabel(j.bbox)}</td>
                 <td>{j.tasks.map((t) => TASKS[t]?.label || t).join(', ')}</td>
-                <td>NASA</td>
+                <td className="hide-phone">NASA</td>
                 <td><span className={`badge ${STATUS_TONE[j.status] || ''}`}>{j.status.toLowerCase().replace('_', ' ')}</span></td>
                 <td className="r"><Link to={`/jobs/${j.job_id}`}>Open</Link></td>
               </tr>
             ))}</tbody>
-          </table>
+          </table></div>
         )}
         {next && <button className="btn" style={{ marginTop: 10 }} onClick={() => load(next)}>Load older</button>}
       </div>

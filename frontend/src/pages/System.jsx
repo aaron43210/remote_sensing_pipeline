@@ -12,7 +12,7 @@ function GateTable({ gates, title }) {
   return (
     <div>
       <h3>{title}</h3>
-      <table className="data">
+      <div className="table-wrap"><table className="data">
         <thead><tr><th>Check</th><th className="r">HydraNet vs classical</th><th className="r">Required</th><th>Result</th></tr></thead>
         <tbody>{rows.map(([k, g]) => (
           <tr key={k}>
@@ -24,7 +24,7 @@ function GateTable({ gates, title }) {
                 : <span className="badge critical"><CircleAlert size={12} /> fail</span>}</td>
           </tr>
         ))}</tbody>
-      </table>
+      </table></div>
     </div>
   )
 }
@@ -65,13 +65,13 @@ export default function System() {
       {stats?.tasks_24h?.length > 0 && (
         <div className="card">
           <h2>Map outcomes (24 h)</h2>
-          <table className="data">
+          <div className="table-wrap"><table className="data">
             <thead><tr><th>Map</th><th>Outcome</th><th className="r">Count</th></tr></thead>
             <tbody>{stats.tasks_24h.map((r) => (
               <tr key={`${r.task}-${r.state}`}><td>{TASKS[r.task]?.label || r.task}</td>
                 <td className="secondary">{r.state.toLowerCase().replace('_', ' ')}</td><td className="r">{r.count}</td></tr>
             ))}</tbody>
-          </table>
+          </table></div>
         </div>
       )}
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -85,11 +85,11 @@ export default function System() {
               One network with three heads ({card.format?.toUpperCase()}, {card.parameters?.toLocaleString()} parameters),
               trained to reproduce the classical methods. Feature spec <span className="num">{model.feature_spec_hash}</span>.
             </p>
-            <table className="data"><tbody>
+            <div className="table-wrap"><table className="data"><tbody>
               {Object.entries(card.trained_to_reproduce || {}).map(([k, v]) => (
                 <tr key={k}><td style={{ width: 120 }}>{TASKS[k === 'agriculture' ? 'agriculture' : k]?.label || k}</td><td className="secondary">{v}</td></tr>
               ))}
-            </tbody></table>
+            </tbody></table></div>
             <GateTable title="Map verification (whole scenes, real Landsat included)" gates={model.map_verification?.gates} />
             <GateTable title="Training gates (held-out data, measured on the ONNX file)" gates={card.gates} />
           </>
