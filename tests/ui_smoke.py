@@ -55,7 +55,10 @@ with sync_playwright() as p:
     # the test IdP signs in whoever login_hint names; a real user picks their Google account here
     def hint(route):   # Playwright does not route redirect hops: add login_hint to the gateway's redirect itself
         resp = route.fetch(max_redirects=0)
-        route.fulfill(response=resp, headers={**resp.headers, "location": resp.headers["location"] + f"&login_hint={email}"})
+        loc = resp.headers.get("location")
+        if not loc:   # e.g. 429 from the sign-in rate limit: pass the response through unchanged
+            return route.fulfill(response=resp)
+        route.fulfill(response=resp, headers={**resp.headers, "location": loc + ("&" if "?" in loc else "?") + f"login_hint={email}"})
     page.route("**/api/auth/google/login*", hint)
     page.get_by_role("link", name="Sign in with Google").click()
     expect(page.get_by_role("heading", name="Make maps for an area")).to_be_visible(timeout=20000)

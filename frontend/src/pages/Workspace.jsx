@@ -30,9 +30,9 @@ export default function Workspace() {
   const isLandscape = useMediaQuery(LANDSCAPE_PHONE)
   const sheet = isPhone && !isLandscape   // phones in portrait: the panel is a bottom sheet over the map
 
-  // Sheet rules: get out of the way to draw or inspect; come back with the result.
+  // Sheet rules: get out of the way to draw or inspect; come back with the result
+  // (a drawn box reopens it in onBbox; cancelling a drawing leaves it as it is).
   useEffect(() => { if (sheet && drawing) setPanelOpen(false) }, [sheet, drawing])
-  useEffect(() => { if (sheet && bbox && !drawing) setPanelOpen(true) }, [sheet, bbox, drawing])
   useEffect(() => { if (sheet && id) setPanelOpen(true) }, [sheet, id])
   useEffect(() => { if (sheet && point) setPanelOpen(false) }, [sheet, point])
 
@@ -76,6 +76,7 @@ export default function Workspace() {
   }, [data, loadLayers])
 
   const onOverlay = useCallback((o) => setOverlays(o), [])
+  const onBbox = useCallback((b) => { setBbox(b); if (sheet) setPanelOpen(true) }, [sheet])
   const cancel = async () => { try { setJob(await api.cancelJob(id)) } catch (e) { setError(e.message) } }
 
   if (!config) return <div className="page muted">Loading…</div>
@@ -89,6 +90,8 @@ export default function Workspace() {
             <span>{panelOpen ? 'Show the map' : id ? 'Job and maps' : 'Make maps for an area'}</span>
           </button>
         )}
+        {/* inert while the sheet is shut: its off-screen controls must not take focus or be read out */}
+        <div className="sheet-body" inert={sheet && !panelOpen}>
         {id ? (
           <>
             <button className="btn" onClick={() => navigate('/')}><Plus size={14} /> New area</button>
@@ -108,8 +111,9 @@ export default function Workspace() {
                      onSubmitted={(j) => navigate(`/jobs/${j.job_id}`)} />
           </>
         )}
+        </div>
       </aside>
-      <AreaMap region={config.allowed_region} maxDeg={config.max_bbox_deg} bbox={bbox} onBbox={setBbox}
+      <AreaMap region={config.allowed_region} maxDeg={config.max_bbox_deg} bbox={bbox} onBbox={onBbox}
                drawing={drawing} setDrawing={setDrawing} overlays={overlays} marker={point}
                coverage={id ? null : coverage}
                onInspect={data ? (lat, lon) => setPoint([lat, lon]) : null}>

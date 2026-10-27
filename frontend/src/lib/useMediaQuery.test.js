@@ -30,7 +30,7 @@ afterEach(() => { window.matchMedia = realMatchMedia })
 describe('useMediaQuery', () => {
   it('exports the shared breakpoints', () => {
     expect(PHONE).toBe('(max-width: 640px)')
-    expect(LANDSCAPE_PHONE).toBe('(max-height: 500px) and (orientation: landscape)')
+    expect(LANDSCAPE_PHONE).toBe('(max-height: 500px) and (orientation: landscape) and (pointer: coarse)')
     expect(COARSE).toBe('(pointer: coarse)')
   })
   it('follows the media query and its changes', () => {
