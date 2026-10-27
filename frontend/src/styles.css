@@ -3,6 +3,7 @@
    its colours from the layer metadata, so map and legend never disagree. */
 :root {
   color-scheme: light;
+  --sheet-peek: 64px;   /* phone bottom sheet: height shown when closed */
   --page: #f9f9f7;
   --surface-1: #fcfcfb;
   --surface-2: #f2f1ed;
@@ -42,7 +43,8 @@ p { margin: 0 0 8px; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* Layout */
-.shell { display: grid; grid-template-rows: 52px 1fr; height: 100%; }
+.shell { display: grid; grid-template-rows: 52px 1fr; height: 100%; height: 100dvh;
+  padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
 .topbar { display: flex; align-items: center; gap: 18px; padding: 0 18px; background: var(--surface-1);
   border-bottom: 1px solid var(--border); }
 .brand { font-weight: 700; letter-spacing: 0.2px; display: flex; align-items: center; gap: 10px; }
@@ -53,6 +55,7 @@ p { margin: 0 0 8px; }
 .nav a { padding: 6px 10px; border-radius: 8px; color: var(--text-secondary); }
 .nav a.active, .nav a:hover { background: var(--surface-2); color: var(--text-primary); text-decoration: none; }
 .topbar .spacer { flex: 1; }
+.topbar .user { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .main { min-height: 0; overflow: hidden; }
 .page { height: 100%; overflow: auto; padding: 20px; }
 .page-narrow { max-width: 1100px; margin: 0 auto; }
@@ -180,11 +183,25 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
 .auth { min-height: 100%; display: grid; place-items: center; padding: 20px; }
 .auth .card { width: 100%; max-width: 380px; display: flex; flex-direction: column; gap: 12px; padding: 22px; }
 
-@media (max-width: 900px) {
-  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }
+/* ── Responsive. Bands: phone <= 640px, tablet 641-1024px, desktop >= 1025px (unchanged);
+   plus touch sizing for coarse pointers. ─────────────────────────────────────── */
+@media (max-width: 640px) {
+  .topbar { gap: 8px; padding: 0 10px; }
+  .nav a .label, .topbar .label, .topbar .user, .hide-phone { display: none; }
+  .workspace { grid-template-columns: 1fr; grid-template-rows: auto 60vh; }   /* until the sheet (Task 6) */
   .sidebar { border-right: 0; border-bottom: 1px solid var(--border); }
   .grid4 { grid-template-columns: 1fr 1fr; }
-  .nav a span { display: none; }
+}
+@media (max-width: 400px) { .brand-name { display: none; } }
+@media (min-width: 641px) and (max-width: 1024px) {
+  .workspace { grid-template-columns: 340px 1fr; }
+}
+@media (pointer: coarse) {
+  .btn, .tabs button, .chip, .nav a, select,
+  input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
+  .nav a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
+  .btn.small { min-width: 44px; }
+  input, select { font-size: 16px; }   /* below 16px iOS zooms the page on focus */
 }
 
 /* raster overlays: show real pixels, do not blur them */
