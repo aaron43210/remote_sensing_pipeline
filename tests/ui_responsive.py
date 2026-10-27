@@ -173,7 +173,64 @@ def tiles_cover_map_after_resize(page, dev, job):
     ok(miss == 0, f"tiles_cover_map_after_resize[{dev['name']}]: {miss}/96 sample points with no map tile")
 
 
-DEVICE_CHECKS = [touch_draw_makes_box, tiles_cover_map_after_resize]
+def rect(page, sel):
+    return page.evaluate(f"(() => {{ const e = document.querySelector('{sel}'); if (!e) return null; const r = e.getBoundingClientRect(); return {{top: r.top, bottom: r.bottom, left: r.left, right: r.right, width: r.width, height: r.height}} }})()")
+
+
+def sheet_toggles(page, dev, job):
+    if dev["name"] not in ("360x740", "390x844"):
+        return
+    go(page, "/", job)
+    H = dev["height"]
+    handle = page.locator(".sheet-handle")
+    if handle.count() == 0:
+        return ok(False, f"sheet_toggles[{dev['name']}]: no sheet handle")
+    if handle.get_attribute("aria-expanded") == "true":
+        handle.tap(); page.wait_for_timeout(400)
+    sheet = rect(page, ".sidebar")
+    map_visible = sheet["top"] - rect(page, ".mapwrap")["top"]
+    h = rect(page, ".sheet-handle")
+    ok(map_visible >= 0.55 * H and 0 <= h["top"] and h["bottom"] <= H,
+       f"sheet_toggles[{dev['name']}] closed: map shows {map_visible:.0f}px of {H}, handle visible {h['bottom'] <= H}")
+    handle.tap(); page.wait_for_timeout(400)
+    btn = page.get_by_role("button", name="Make maps")
+    btn.scroll_into_view_if_needed()
+    b = btn.bounding_box()
+    ok(handle.get_attribute("aria-expanded") == "true" and b and b["y"] >= 0 and b["y"] + b["height"] <= H,
+       f"sheet_toggles[{dev['name']}] open: 'Make maps' reachable {bool(b)}")
+    page.get_by_role("button", name="Draw area").tap(); page.wait_for_timeout(400)
+    ok(handle.get_attribute("aria-expanded") == "false", f"sheet_toggles[{dev['name']}]: drawing closes the sheet")
+    page.get_by_role("button", name="Cancel").tap(); page.wait_for_timeout(300)
+
+
+def landscape_side_by_side(page, dev, job):
+    if dev["name"] != "844x390":
+        return
+    go(page, "/", job)
+    sb, mw = rect(page, ".sidebar"), rect(page, ".mapwrap")
+    ok(abs(sb["width"] - 300) <= 2 and sb["right"] <= mw["left"] + 1 and mw["height"] >= 200 and page.locator(".sheet-handle").count() == 0,
+       f"landscape_side_by_side[{dev['name']}]: panel {sb['width']:.0f}px, map {mw['width']:.0f}x{mw['height']:.0f}")
+
+
+def tablet_columns(page, dev, job):
+    if dev["name"] != "768x1024":
+        return
+    go(page, "/", job)
+    sb = rect(page, ".sidebar")
+    ok(abs(sb["width"] - 340) <= 2, f"tablet_columns[{dev['name']}]: panel {sb['width']:.0f}px")
+
+
+def desktop_unchanged(page, dev, job):
+    if dev["name"] != "1440x900":
+        return
+    go(page, "/", job)
+    sb = rect(page, ".sidebar")
+    ok(abs(sb["width"] - 420) <= 1 and page.locator(".sheet-handle").count() == 0,
+       f"desktop_unchanged[{dev['name']}]: panel {sb['width']:.0f}px, handle {page.locator('.sheet-handle').count()}")
+
+
+DEVICE_CHECKS = [sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
+                 touch_draw_makes_box, tiles_cover_map_after_resize]
 
 
 def go(page, route, job):

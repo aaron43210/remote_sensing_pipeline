@@ -8,6 +8,7 @@ import JobTimeline from '../components/JobTimeline'
 import PixelInspector from '../components/PixelInspector'
 import ResultsPanel from '../components/ResultsPanel'
 import { forgetCogs } from '../lib/cog'
+import { LANDSCAPE_PHONE, PHONE, useMediaQuery } from '../lib/useMediaQuery'
 import { todayIso, yearAgoIso } from '../lib/format'
 import { useServerConfig } from '../useServerConfig'
 
@@ -24,6 +25,16 @@ export default function Workspace() {
   const [error, setError] = useState(null)
   const [dates, setDates] = useState(() => [yearAgoIso(), todayIso()])
   const [coverage, setCoverage] = useState(null)
+  const [panelOpen, setPanelOpen] = useState(true)
+  const isPhone = useMediaQuery(PHONE)
+  const isLandscape = useMediaQuery(LANDSCAPE_PHONE)
+  const sheet = isPhone && !isLandscape   // phones in portrait: the panel is a bottom sheet over the map
+
+  // Sheet rules: get out of the way to draw or inspect; come back with the result.
+  useEffect(() => { if (sheet && drawing) setPanelOpen(false) }, [sheet, drawing])
+  useEffect(() => { if (sheet && bbox && !drawing) setPanelOpen(true) }, [sheet, bbox, drawing])
+  useEffect(() => { if (sheet && id) setPanelOpen(true) }, [sheet, id])
+  useEffect(() => { if (sheet && point) setPanelOpen(false) }, [sheet, point])
 
   // Where EMIT data exists for the chosen dates (shown on the map while choosing an area).
   useEffect(() => {
@@ -70,7 +81,14 @@ export default function Workspace() {
   if (!config) return <div className="page muted">Loading…</div>
   return (
     <div className="workspace">
-      <aside className="sidebar">
+      <aside id="panel" className={`sidebar${sheet ? ' sheet' : ''}${sheet && panelOpen ? ' open' : ''}`}>
+        {sheet && (
+          <button type="button" className="sheet-handle" aria-expanded={panelOpen} aria-controls="panel"
+                  onClick={() => setPanelOpen((o) => !o)}>
+            <span className="grip" aria-hidden="true" />
+            <span>{panelOpen ? 'Show the map' : id ? 'Job and maps' : 'Make maps for an area'}</span>
+          </button>
+        )}
         {id ? (
           <>
             <button className="btn" onClick={() => navigate('/')}><Plus size={14} /> New area</button>
