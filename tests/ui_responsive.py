@@ -229,7 +229,48 @@ def desktop_unchanged(page, dev, job):
        f"desktop_unchanged[{dev['name']}]: panel {sb['width']:.0f}px, handle {page.locator('.sheet-handle').count()}")
 
 
-DEVICE_CHECKS = [sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
+def inside(r, W, H):
+    return r and r["left"] >= -0.5 and r["top"] >= -0.5 and r["right"] <= W + 0.5 and r["bottom"] <= H + 0.5
+
+
+def overlays_fit(page, dev, job):
+    if dev["name"] != "360x740":
+        return
+    W, H = dev["width"], dev["height"]
+    go(page, "/", job)
+    try:
+        page.locator(".coverage-legend").wait_for(state="attached", timeout=10000)
+    except Exception:
+        ok(False, f"overlays_fit[{dev['name']}]: no coverage legend on the map")
+    else:
+        is_open = page.evaluate("document.querySelector('.coverage-legend').open")
+        ok(is_open is False and inside(rect(page, ".coverage-legend"), W, H),
+           f"overlays_fit[{dev['name']}] coverage legend starts collapsed and on screen (open={is_open})")
+    go(page, "/jobs/{job}", job)
+    page.wait_for_timeout(1500)
+    m = rect(page, ".leaflet-container")
+    page.touchscreen.tap(m["left"] + m["width"] / 2, m["top"] + 0.2 * H)
+    page.locator(".inspector").wait_for(timeout=10000)
+    page.wait_for_timeout(500)
+    ins, hd = rect(page, ".inspector"), rect(page, ".sheet-handle")
+    ok(inside(ins, W, H) and ins["height"] <= 0.4 * H + 1 and (not hd or ins["bottom"] <= hd["top"] + 0.5),
+       f"overlays_fit[{dev['name']}] inspector {ins['width']:.0f}x{ins['height']:.0f} at {ins['top']:.0f}-{ins['bottom']:.0f}, handle top {hd and round(hd['top'])}")
+    page.locator(".inspector button[aria-label=Close]").tap()
+
+
+def map_tools_reachable(page, dev, job):
+    if dev["name"] != "320x568":
+        return
+    go(page, "/", job)
+    boxes = page.evaluate("""() => [...document.querySelectorAll('.map-tools .btn, .leaflet-control-zoom a')]
+        .map(e => { const r = e.getBoundingClientRect(); return {n: e.textContent.trim() || e.title, l: r.left, t: r.top, r: r.right, b: r.bottom, w: r.width, h: r.height} })""")
+    small = [b["n"] for b in boxes if b["w"] < 44 or b["h"] < 44]
+    clash = [(a["n"], b["n"]) for i, a in enumerate(boxes) for b in boxes[i + 1:]
+             if a["l"] < b["r"] and b["l"] < a["r"] and a["t"] < b["b"] and b["t"] < a["b"]]
+    ok(boxes and not small and not clash, f"map_tools_reachable[{dev['name']}]: too small {small}, overlapping {clash}")
+
+
+DEVICE_CHECKS = [overlays_fit, map_tools_reachable, sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
                  touch_draw_makes_box, tiles_cover_map_after_resize]
 
 
@@ -254,13 +295,20 @@ def go(page, route, job):
 EMAIL = f"responsive-tester-with-a-long-name-{secrets.token_hex(3)}@example.com"   # long names must fit too
 
 
-def sign_in(page):
+def sign_in(page, retry=True):
     """Sign in through the test IdP, as a person would (refresh tokens rotate: every context signs in itself)."""
     page.route("**/authorize?*", lambda r: r.continue_(url=r.request.url + f"&login_hint={EMAIL}"))
     throttle(4)   # login page refresh, google/login, callback, refresh after landing
     page.goto(f"{BASE}/login")
     page.get_by_role("link", name="Sign in with Google").click()
-    page.wait_for_selector(".leaflet-container", state="attached", timeout=30000)
+    try:
+        page.wait_for_selector(".leaflet-container", state="attached", timeout=30000)
+    except Exception:
+        if not retry:
+            raise
+        time.sleep(61)   # an earlier run in the same minute used up the sign-in rate limit
+        page.unroute("**/authorize?*")
+        sign_in(page, retry=False)
 
 
 def seed(browser):

@@ -164,6 +164,7 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
   pointer-events: none; }
 .coverage-legend { position: absolute; left: 12px; bottom: 24px; z-index: 500; max-width: 290px; padding: 10px 12px;
   font-size: 12px; display: flex; flex-direction: column; gap: 6px; }
+.coverage-legend summary { font-weight: 600; cursor: pointer; }
 .map-tools { position: absolute; top: 12px; right: 12px; z-index: 500; display: flex; gap: 6px; }
 .inspector { position: absolute; bottom: 16px; right: 16px; z-index: 500; width: 300px; max-height: 50%;
   overflow: auto; }
@@ -200,6 +201,10 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
     margin: 0 -16px; width: calc(100% + 32px); min-height: 44px; padding: 8px 16px; border: 0; border-radius: 14px 14px 0 0;
     background: var(--surface-1); color: var(--text-secondary); font: inherit; font-size: 13px; cursor: pointer; }
   .sheet-handle .grip { width: 36px; height: 4px; border-radius: 2px; background: var(--axis); }
+  /* map overlays: full width, above the closed sheet */
+  .inspector { left: 8px; right: 8px; width: auto; bottom: calc(var(--sheet-peek) + 8px); max-height: 40dvh; }
+  .coverage-legend { left: 8px; right: 8px; max-width: none; bottom: calc(var(--sheet-peek) + 8px); }
+  .map-hint { max-width: calc(100% - 24px); white-space: normal; text-align: center; }
   .grid4 { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 400px) { .brand-name { display: none; } }
@@ -216,6 +221,8 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
   input:not([type="checkbox"]):not([type="radio"]) { min-height: 44px; }
   .nav a { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; }
   .btn.small { min-width: 44px; }
+  .leaflet-touch .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; }
+  .coverage-legend summary { min-height: 44px; display: flex; align-items: center; }
   input, select { font-size: 16px; }   /* below 16px iOS zooms the page on focus */
 }
 
