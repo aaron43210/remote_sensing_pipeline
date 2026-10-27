@@ -102,5 +102,10 @@ jobs:
       - run: pip install requests && python tests/e2e.py --base http://localhost:3000 --jobs 3
       - name: attack tests (must all be blocked)
         run: python tests/security.py --base http://localhost:3000 --env .env
+      - name: responsive layout (8 screen sizes, touch and mouse)
+        continue-on-error: true
+        run: |
+          docker run --rm --network host -v $PWD/tests:/t mcr.microsoft.com/playwright/python:v1.48.0-jammy \
+            sh -c "pip install -q playwright==1.48.0 && python /t/ui_responsive.py http://localhost:3000"
       - if: failure()
         run: docker compose logs --tail 200
