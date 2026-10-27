@@ -36,22 +36,27 @@ function DrawController({ drawing, maxDeg, onDraft, onDone, onCancel, onInspect 
     el.style.touchAction = 'none'
     el.style.cursor = 'crosshair'
     const at = (ev) => map.mouseEventToLatLng(ev)
+    let id = null                                   // the one pointer that is drawing
     const down = (ev) => {
+      if (ev.target.closest('.leaflet-control-container')) return   // zoom buttons, attribution: theirs
+      if (!ev.isPrimary) { start = null; id = null; onDraft(null); return }   // a second finger: a pinch, not a box
       if (ev.button > 0) return                     // left button, pen or finger only
       start = at(ev)
+      id = ev.pointerId
       el.setPointerCapture?.(ev.pointerId)
       ev.preventDefault()
     }
-    const move = (ev) => { if (start) onDraft(clampBox(start, at(ev), maxDeg)) }
+    const move = (ev) => { if (start && ev.pointerId === id) onDraft(clampBox(start, at(ev), maxDeg)) }
     const up = (ev) => {
-      if (!start) return
+      if (!start || ev.pointerId !== id) return
       const box = finishBox(start, at(ev), maxDeg)
       start = null
+      id = null
       if (box) onDone(box)
       else onDraft(null)
     }
-    const cancel = () => { start = null; onDraft(null) }
-    const key = (ev) => { if (ev.key === 'Escape') { start = null; onCancel() } }
+    const cancel = (ev) => { if (ev.pointerId === id) { start = null; id = null; onDraft(null) } }
+    const key = (ev) => { if (ev.key === 'Escape') { start = null; id = null; onCancel() } }
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)

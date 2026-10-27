@@ -21,7 +21,10 @@ errors = []
 def login(page, info):
     def hint(route):   # Playwright does not route redirect hops: add login_hint to the gateway's redirect itself
         resp = route.fetch(max_redirects=0)
-        route.fulfill(response=resp, headers={**resp.headers, "location": resp.headers["location"] + f"&login_hint={info['email']}"})
+        loc = resp.headers.get("location")
+        if not loc:   # e.g. 429 from the sign-in rate limit: pass the response through unchanged
+            return route.fulfill(response=resp)
+        route.fulfill(response=resp, headers={**resp.headers, "location": loc + ("&" if "?" in loc else "?") + f"login_hint={info['email']}"})
     page.unroute("**/api/auth/google/login*")
     page.route("**/api/auth/google/login*", hint)
     page.goto(f"{BASE}/login")

@@ -3,7 +3,7 @@
    its colours from the layer metadata, so map and legend never disagree. */
 :root {
   color-scheme: light;
-  --sheet-peek: 64px;   /* phone bottom sheet: height shown when closed */
+  --sheet-peek: calc(64px + env(safe-area-inset-bottom));   /* phone bottom sheet shown when closed, above the home bar */
   --page: #f9f9f7;
   --surface-1: #fcfcfb;
   --surface-2: #f2f1ed;
@@ -63,6 +63,7 @@ p { margin: 0 0 8px; }
 .workspace { display: grid; grid-template-columns: minmax(400px, 420px) 1fr; height: 100%; min-height: 0; }
 .sidebar { background: var(--surface-1); border-right: 1px solid var(--border); overflow-y: auto; overflow-x: hidden; padding: 16px;
   display: flex; flex-direction: column; gap: 14px; box-sizing: border-box; }
+.sheet-body { display: flex; flex-direction: column; gap: 14px; }   /* same stack as .sidebar */
 .mapwrap { position: relative; min-height: 0; }
 .mapwrap .leaflet-container { height: 100%; width: 100%; background: var(--surface-2); }
 
@@ -213,7 +214,7 @@ table.data td.r, table.data th.r { text-align: right; font-variant-numeric: tabu
   .workspace { grid-template-columns: 340px 1fr; }
 }
 /* landscape phones: too short for a sheet, so panel beside the map (after the width bands: it wins) */
-@media (max-height: 500px) and (orientation: landscape) {
+@media (max-height: 500px) and (orientation: landscape) and (pointer: coarse) {
   .workspace { display: grid; grid-template-columns: 300px 1fr; }
   .workspace > .mapwrap { position: relative; inset: auto; }
 }

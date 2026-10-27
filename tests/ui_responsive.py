@@ -119,21 +119,35 @@ def open_app(page, dev):
 
 
 # ── device checks (run once per device, after the page checks) ───────────────
+PANE = "document.querySelector('.leaflet-map-pane').style.transform"
+
+
 def touch_drag(page, x0, y0, x1, y1, steps=6):
+    """One-finger drag; returns the map pane transform just before the finger lifts."""
     cdp = page.context.new_cdp_session(page)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": x0, "y": y0}]})
     for i in range(1, steps + 1):
         x, y = x0 + (x1 - x0) * i / steps, y0 + (y1 - y0) * i / steps
         cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": [{"x": x, "y": y}]})
         page.wait_for_timeout(30)
+    mid = page.evaluate(PANE)
     cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
     cdp.detach()
+    return mid
+
+
+def open_sheet(page):
+    """On phones the form lives in the bottom sheet: open it first, as a person would."""
+    h = page.locator(".sheet-handle")
+    if h.count() and h.get_attribute("aria-expanded") != "true":
+        h.tap(); page.wait_for_timeout(400)
 
 
 def touch_draw_makes_box(page, dev, job):
     if dev["name"] not in ("390x844", "768x1024", "1440x900"):
         return
     go(page, "/", job)
+    open_sheet(page)
     page.get_by_role("button", name="Draw area").click()
     page.wait_for_timeout(300)
     m = page.locator(".leaflet-container")
@@ -143,13 +157,16 @@ def touch_draw_makes_box(page, dev, job):
     text = lambda: summary.first.inner_text() if summary.count() else ""
     had_box = text()
     before = page.evaluate("document.querySelector('.leaflet-map-pane').style.transform")
-    pts = (b["x"] + b["width"] * 0.4, b["y"] + b["height"] * 0.4, b["x"] + b["width"] * 0.6, b["y"] + b["height"] * 0.6)
+    # half the map: still a real box when an earlier check left the map zoomed far in (min side 0.002 deg)
+    pts = (b["x"] + b["width"] * 0.25, b["y"] + b["height"] * 0.2, b["x"] + b["width"] * 0.75, b["y"] + b["height"] * 0.6)
+    # "panned" is judged during the gesture: once a box is set the app fits the map to it on purpose
     if dev["touch"]:
-        touch_drag(page, *pts)
+        after = touch_drag(page, *pts)
     else:   # desktop: the same drawing with a mouse must keep working
-        page.mouse.move(pts[0], pts[1]); page.mouse.down(); page.mouse.move(pts[2], pts[3], steps=6); page.mouse.up()
+        page.mouse.move(pts[0], pts[1]); page.mouse.down(); page.mouse.move(pts[2], pts[3], steps=6)
+        after = page.evaluate(PANE)
+        page.mouse.up()
     page.wait_for_timeout(500)
-    after = page.evaluate("document.querySelector('.leaflet-map-pane').style.transform")
     boxed = text() not in ("", had_box)
     ok(boxed and before == after, f"touch_draw_makes_box[{dev['name']}]: new box drawn {boxed}, map panned {before != after}")
 
@@ -283,8 +300,7 @@ def dialog_fits_small_screen(page, dev, job):
     page.set_viewport_size({"width": 360, "height": 640})
     try:
         go(page, "/", job)
-        if page.locator(".sheet-handle").get_attribute("aria-expanded") != "true":
-            page.locator(".sheet-handle").tap(); page.wait_for_timeout(400)
+        open_sheet(page)
         page.get_by_role("checkbox", name="Minerals").tap()
         dlg = page.get_by_role("dialog", name="Connect your NASA account")
         dlg.wait_for(timeout=5000)
@@ -319,7 +335,67 @@ def stats_grid(page, dev, job):
         ctx.close()
 
 
-DEVICE_CHECKS = [stats_grid, dialog_fits_small_screen, overlays_fit, map_tools_reachable, sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
+def two_finger(page, a0, b0, a1, b1, steps=5):
+    cdp = page.context.new_cdp_session(page)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchStart", "touchPoints": [{"x": a0[0], "y": a0[1], "id": 1}, {"x": b0[0], "y": b0[1], "id": 2}]})
+    for i in range(1, steps + 1):
+        f = i / steps
+        pts = [{"x": a0[0] + (a1[0] - a0[0]) * f, "y": a0[1] + (a1[1] - a0[1]) * f, "id": 1},
+               {"x": b0[0] + (b1[0] - b0[0]) * f, "y": b0[1] + (b1[1] - b0[1]) * f, "id": 2}]
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": pts})
+        page.wait_for_timeout(30)
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+    cdp.detach()
+
+
+ZOOM = """(() => { const c = [...document.querySelectorAll('.leaflet-tile-container')].filter(c => c.querySelector('img'))
+    .sort((a, b) => (+b.style.zIndex) - (+a.style.zIndex))[0];   // the level on top is the current zoom
+  const m = c && c.querySelector('img').src.match(/tile\\/(\\d+)\\//); return m ? +m[1] : null })()"""
+
+
+def drawing_edge_cases(page, dev, job):
+    """Review findings: a pinch must not draw; the zoom buttons work while drawing; Cancel keeps the sheet shut."""
+    if dev["name"] not in ("390x844", "1440x900"):
+        return
+    go(page, "/", job)
+    handle = page.locator(".sheet-handle")
+    summary = page.locator("form p.secondary.num", has_text="km²")
+    text = lambda: summary.first.inner_text() if summary.count() else ""
+    open_sheet(page)
+    page.get_by_role("button", name="Draw area").click(); page.wait_for_timeout(400)
+    m = rect(page, ".leaflet-container")
+    cx, cy = m["left"] + m["width"] / 2, m["top"] + m["height"] * 0.4
+    if dev["touch"]:
+        before = text()
+        two_finger(page, (cx - 30, cy - 30), (cx + 30, cy + 30), (cx - 90, cy - 90), (cx + 90, cy + 90))
+        page.wait_for_timeout(600)
+        ok(text() == before, f"pinch_does_not_draw[{dev['name']}]: box changed {text() != before}")
+    z0 = page.evaluate(ZOOM)
+    page.locator(".leaflet-control-zoom-in").click(); page.wait_for_timeout(1200)
+    z1 = page.evaluate(ZOOM)
+    ok(z0 is not None and z1 == z0 + 1, f"zoom_buttons_while_drawing[{dev['name']}]: zoom {z0} -> {z1}")
+    page.get_by_role("button", name="Cancel").click(); page.wait_for_timeout(400)
+    if dev["touch"]:
+        ok(handle.get_attribute("aria-expanded") == "false", f"cancel_keeps_sheet_closed[{dev['name']}]: expanded={handle.get_attribute('aria-expanded')}")
+        hidden = page.evaluate("""(() => { const b = document.querySelector('.sheet-body'); if (!b) return 'no .sheet-body';
+            const f = [...b.querySelectorAll('button, input, select, a')]; f[0] && f[0].focus();
+            return b.inert === true && !b.contains(document.activeElement) })()""")
+        ok(hidden is True, f"closed_sheet_not_focusable[{dev['name']}]: {hidden}")
+
+
+def desktop_short_window(page, dev, job):
+    if dev["name"] != "1440x900":
+        return
+    page.set_viewport_size({"width": 1366, "height": 480})   # desktop with devtools docked: not a phone
+    try:
+        go(page, "/", job)
+        sb = rect(page, ".sidebar")
+        ok(sb["width"] >= 400, f"desktop_short_window[1366x480]: panel {sb['width']:.0f}px (desktop column, not the phone one)")
+    finally:
+        page.set_viewport_size({"width": dev["width"], "height": dev["height"]})
+
+
+DEVICE_CHECKS = [drawing_edge_cases, desktop_short_window, stats_grid, dialog_fits_small_screen, overlays_fit, map_tools_reachable, sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
                  touch_draw_makes_box, tiles_cover_map_after_resize]
 
 
@@ -349,7 +425,9 @@ def hint_login(page, email):
     hint to the gateway's redirect to the IdP itself (the hn_oauth cookie on that response is kept)."""
     def handle(route):
         resp = route.fetch(max_redirects=0)
-        loc = resp.headers.get("location", "")
+        loc = resp.headers.get("location")
+        if not loc:   # e.g. 429 from the sign-in rate limit: pass it through unchanged
+            return route.fulfill(response=resp)
         route.fulfill(response=resp, headers={**resp.headers, "location": loc + ("&" if "?" in loc else "?") + f"login_hint={email}"})
     page.route("**/api/auth/google/login*", handle)
 

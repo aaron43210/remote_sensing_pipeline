@@ -123,7 +123,8 @@ export function CompositionBars({ rows, onPick, picked }) {
           </table>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} onPointerLeave={() => setHover(null)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}
+             onPointerLeave={(e) => { if (e.pointerType !== 'touch') setHover(null) }}>
           {shown.map((r) => (
             <button key={r.name} type="button" className="bar-row" onPointerEnter={() => setHover(r.name)}
                     onClick={() => onPick && onPick(picked === r.name ? null : r.name)}
