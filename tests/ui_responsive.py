@@ -147,7 +147,33 @@ def touch_draw_makes_box(page, dev, job):
     ok(boxed and before == after, f"touch_draw_makes_box[{dev['name']}]: new box drawn {boxed}, map panned {before != after}")
 
 
-DEVICE_CHECKS = [touch_draw_makes_box]
+TILES_COVER = """() => { const c = document.querySelector('.leaflet-container').getBoundingClientRect();
+  const t = [...document.querySelectorAll('img.leaflet-tile')].filter(i => i.complete && i.naturalWidth > 0)
+    .map(i => i.getBoundingClientRect());
+  let miss = 0;
+  for (let i = 0; i < 12; i++) for (let j = 0; j < 8; j++) {
+    const x = c.left + (i + 0.5) * c.width / 12, y = c.top + (j + 0.5) * c.height / 8;
+    if (!t.some(r => x >= r.left && x <= r.right && y >= r.top && y <= r.bottom)) miss++;
+  }
+  return miss }"""
+
+
+def tiles_cover_map_after_resize(page, dev, job):
+    if dev["name"] not in ("390x844", "1440x900"):
+        return
+    go(page, "/jobs/{job}", job)
+    wait_until(page, f"({TILES_COVER})() === 0", 20)
+    # The window keeps its size; only the map's box grows (what a panel or sheet change does).
+    # Leaflet already follows window resizes; this is the case that left grey tile areas.
+    page.evaluate("""() => { const w = document.querySelector('.mapwrap'); const r = w.getBoundingClientRect();
+        w.style.position = 'fixed'; w.style.inset = '0'; w.style.zIndex = '9999'; }""")
+    wait_until(page, f"({TILES_COVER})() === 0", 6)
+    miss = page.evaluate(f"({TILES_COVER})()")
+    page.evaluate("() => { const w = document.querySelector('.mapwrap'); w.style.position = w.style.inset = w.style.zIndex = ''; }")
+    ok(miss == 0, f"tiles_cover_map_after_resize[{dev['name']}]: {miss}/96 sample points with no map tile")
+
+
+DEVICE_CHECKS = [touch_draw_makes_box, tiles_cover_map_after_resize]
 
 
 def go(page, route, job):

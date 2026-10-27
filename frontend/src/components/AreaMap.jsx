@@ -72,6 +72,24 @@ function DrawController({ drawing, maxDeg, onDraft, onDone, onCancel, onInspect 
   return null
 }
 
+// Leaflet follows window resizes only. Its box also changes when the panel or the
+// phone sheet moves, or the layout settles: refit then too, or tiles stay grey.
+function AutoResize() {
+  const map = useMap()
+  useEffect(() => {
+    const box = map.getContainer().parentElement
+    if (!box || typeof ResizeObserver === 'undefined') return undefined
+    let frame = 0
+    const ro = new ResizeObserver(() => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => map.invalidateSize({ pan: false }))
+    })
+    ro.observe(box)
+    return () => { cancelAnimationFrame(frame); ro.disconnect() }
+  }, [map])
+  return null
+}
+
 // EMIT coverage: everything WITHOUT data in the dates is dimmed and the covered
 // area keeps its imagery, with a white outline; scenes already downloaded get an
 // aqua outline (maps in seconds). Canvas, non-interactive: drawing and clicks pass through.
@@ -163,6 +181,7 @@ export default function AreaMap({ region, maxDeg, bbox, onBbox, drawing, setDraw
         <DrawController drawing={drawing} maxDeg={maxDeg} onDraft={setDraft} onDone={finishDrawing}
                         onCancel={stopDrawing} onInspect={onInspect} />
         <FitTo bbox={bbox} />
+        <AutoResize />
       </MapContainer>
       <div className="map-tools">
         {drawing && <button className="btn small" onClick={stopDrawing}>Cancel</button>}
