@@ -3,7 +3,7 @@ import L from 'leaflet'
 import { GeoJSON, ImageOverlay, MapContainer, Polygon, Rectangle, TileLayer, useMap, useMapEvents } from 'react-leaflet'
 import 'leaflet/dist/leaflet.css'
 import { clampBox, finishBox } from '../lib/draw'
-import { COARSE, useMediaQuery } from '../lib/useMediaQuery'
+import { COARSE, PHONE, useMediaQuery } from '../lib/useMediaQuery'
 
 const BASEMAPS = {
   imagery: {
@@ -109,10 +109,12 @@ function dimRings(region, area) {
 function CoverageLegend({ coverage, show, setShow }) {
   const n = coverage.features.length
   const staged = coverage.features.filter((f) => f.properties.staged).length
+  const isPhone = useMediaQuery(PHONE)   // phones: start collapsed, the map comes first
   return (
-    <div className="coverage-legend card" aria-label="EMIT coverage">
-      <label className="row" style={{ gap: 6, fontWeight: 600 }}>
-        <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> EMIT coverage
+    <details className="coverage-legend card" aria-label="EMIT coverage" open={!isPhone}>
+      <summary>EMIT coverage ({n} scenes)</summary>
+      <label className="row" style={{ gap: 6 }}>
+        <input type="checkbox" checked={show} onChange={(e) => setShow(e.target.checked)} /> Show on the map
       </label>
       {n === 0 ? (
         <div className="muted">{coverage.indexed_at ? 'No usable EMIT scene in these dates (whole map dimmed).' : 'Coverage not indexed yet.'}</div>
@@ -126,7 +128,7 @@ function CoverageLegend({ coverage, show, setShow }) {
           <div className="item muted">Agriculture and minerals need a scene covering the whole box</div>
         </div>
       )}
-    </div>
+    </details>
   )
 }
 
