@@ -56,7 +56,8 @@ def wait_until(page, js, timeout=20.0):
 
 # ── checks (each takes page, dev, route) ─────────────────────────────────────
 def check_no_horizontal_overflow(page, dev, route):
-    over = page.evaluate("document.documentElement.scrollWidth - window.innerWidth")
+    # against the DEVICE width: a too-wide page makes mobile Chrome zoom out, so innerWidth grows with it
+    over = page.evaluate("Math.max(document.documentElement.scrollWidth, window.innerWidth)") - dev["width"]
     ok(over <= 0, f"no_horizontal_overflow[{dev['name']}] {route}: {over}px too wide")
 
 
@@ -73,7 +74,28 @@ def check_tap_targets(page, dev, route):
     ok(not small, f"tap_targets_44px[{dev['name']}] {route}: {len(small)} too small {small[:4]}")
 
 
-ROUTE_CHECKS = [check_no_horizontal_overflow, check_tap_targets]
+def check_topbar_one_line(page, dev, route):
+    if route == "/login":
+        return
+    r = page.evaluate("""(W) => { const t = document.querySelector('.topbar').getBoundingClientRect();
+        const out = [...document.querySelectorAll('.topbar a, .topbar button')].filter(e => e.offsetParent)
+          .filter(e => { const b = e.getBoundingClientRect(); return b.right > W + 0.5 || b.left < -0.5 || b.bottom > t.bottom + 0.5 })
+          .map(e => e.textContent.trim() || e.getAttribute('aria-label'));
+        const wide = document.querySelector('.topbar').scrollWidth - document.querySelector('.topbar').clientWidth;
+        return { h: t.height, out, wide } }""", dev["width"])
+    ok(r["h"] <= 56 and not r["out"] and r["wide"] <= 0,
+       f"topbar_one_line[{dev['name']}] {route}: height {r['h']:.0f}px, cut off {r['out']}, {r['wide']}px hidden")
+
+
+def check_nothing_clipped(page, dev, route):
+    """Overflow hidden inside the layout (not just the page): nothing wider than the screen."""
+    wide = page.evaluate("""(W) => [...document.querySelectorAll('.topbar, .sidebar, .page, .card, table.data')]
+        .filter(e => e.offsetParent && e.getBoundingClientRect().right > W + 1 && !e.closest('.table-wrap'))
+        .map(e => e.className.toString().split(' ')[0])""", dev["width"])
+    ok(not wide, f"nothing_clipped[{dev['name']}] {route}: {wide[:5]}")
+
+
+ROUTE_CHECKS = [check_no_horizontal_overflow, check_nothing_clipped, check_topbar_one_line, check_tap_targets]
 
 
 def open_app(page, dev):
@@ -107,7 +129,7 @@ def go(page, route, job):
     page.wait_for_timeout(600)
 
 
-EMAIL = f"resp-{secrets.token_hex(4)}@example.com"
+EMAIL = f"responsive-tester-with-a-long-name-{secrets.token_hex(3)}@example.com"   # long names must fit too
 
 
 def sign_in(page):

@@ -28,15 +28,15 @@ function Shell({ children }) {
   return (
     <div className="shell">
       <header className="topbar">
-        <div className="brand"><img src={logo} alt="HydraNet Logo" className="brand-logo" /> HydraNet Maps</div>
+        <div className="brand"><img src={logo} alt="HydraNet Logo" className="brand-logo" /> <span className="brand-name">HydraNet Maps</span></div>
         <nav className="nav">
-          <NavLink to="/" end><Map size={14} /> <span>Map</span></NavLink>
-          <NavLink to="/jobs"><HistoryIcon size={14} /> <span>Jobs</span></NavLink>
-          <NavLink to="/system"><Activity size={14} /> <span>Platform</span></NavLink>
+          <NavLink to="/" end><Map size={14} /> <span className="label">Map</span></NavLink>
+          <NavLink to="/jobs"><HistoryIcon size={14} /> <span className="label">Jobs</span></NavLink>
+          <NavLink to="/system"><Activity size={14} /> <span className="label">Platform</span></NavLink>
         </nav>
         <div className="spacer" />
-        <span className="secondary" style={{ fontSize: 13 }}>{user?.name}</span>
-        {!DEMO && <button className="btn small" onClick={logout}><LogOut size={14} /> Sign out</button>}
+        <span className="user secondary" style={{ fontSize: 13 }}>{user?.name}</span>
+        {!DEMO && <button className="btn small" onClick={logout} aria-label="Sign out"><LogOut size={14} /> <span className="label">Sign out</span></button>}
       </header>
       {DEMO && (
         <div className="notice demo" role="note">
