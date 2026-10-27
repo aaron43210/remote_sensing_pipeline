@@ -2,7 +2,7 @@
 // thin bars with 4px rounded data-ends anchored at the baseline, a 2px surface
 // gap between touching bars, hairline recessive grid, a hover tooltip on every
 // mark, and a table view so nothing depends on colour alone.
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { compact, fmt, pct } from '../lib/format'
 
 function roundedTopBar(x, y, w, h, r = 4) {
@@ -24,10 +24,23 @@ function niceMax(v) {
   return 10 * p
 }
 
+// Hover with a mouse, tap with a finger: either sets `hover`; a tap outside clears it.
+function useTapAway(ref, active, clear) {
+  useEffect(() => {
+    if (!active) return undefined
+    const away = (e) => { if (!ref.current?.contains(e.target)) clear() }
+    document.addEventListener('pointerdown', away)
+    return () => document.removeEventListener('pointerdown', away)
+  }, [ref, active, clear])
+}
+
 // Histogram of one map layer (single series: the title names it, no legend box).
 export function Histogram({ histogram, units, color = 'var(--series-1)', height = 140 }) {
   const [hover, setHover] = useState(null)
   const [table, setTable] = useState(false)
+  const ref = useRef(null)
+  const clear = useCallback(() => setHover(null), [])
+  useTapAway(ref, hover !== null, clear)
   if (!histogram || !histogram.counts?.length) return <p className="muted">No distribution for this layer.</p>
   const { counts, edges } = histogram
   const W = 320, H = height, padL = 34, padB = 22, padT = 8
@@ -38,7 +51,7 @@ export function Histogram({ histogram, units, color = 'var(--series-1)', height 
   const y = (v) => padT + plotH - (v / max) * plotH
   const ticks = [0, max / 2, max]
   return (
-    <div className="chart">
+    <div className="chart" ref={ref}>
       <div className="row between" style={{ marginBottom: 4 }}>
         <span className="muted" style={{ fontSize: 12 }}>Pixels per value{units ? ` (${units})` : ''}</span>
         <button className="btn small" onClick={() => setTable(!table)} aria-pressed={table}>{table ? 'Chart' : 'Table'}</button>
@@ -54,7 +67,7 @@ export function Histogram({ histogram, units, color = 'var(--series-1)', height 
         </div>
       ) : (
         <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Histogram${units ? ` in ${units}` : ''}`}
-             onMouseLeave={() => setHover(null)}>
+             onPointerLeave={(e) => { if (e.pointerType !== 'touch') setHover(null) }}>
           {ticks.map((t) => (
             <g key={t}>
               <line x1={padL} x2={W - 4} y1={y(t)} y2={y(t)} stroke="var(--grid)" strokeWidth="1" />
@@ -64,7 +77,7 @@ export function Histogram({ histogram, units, color = 'var(--series-1)', height 
           {counts.map((c, i) => {
             const x = padL + i * slot + (slot - barW) / 2
             return (
-              <g key={i} onMouseEnter={() => setHover(i)}>
+              <g key={i} onPointerEnter={() => setHover(i)} onPointerDown={() => setHover(i)}>
                 <rect x={padL + i * slot} y={padT} width={slot} height={plotH} fill="transparent" />
                 <path d={roundedTopBar(x, y(c), barW, padT + plotH - y(c))} fill={color}
                       opacity={hover === null || hover === i ? 1 : 0.45} />
@@ -110,9 +123,9 @@ export function CompositionBars({ rows, onPick, picked }) {
           </table>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} onMouseLeave={() => setHover(null)}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }} onPointerLeave={() => setHover(null)}>
           {shown.map((r) => (
-            <button key={r.name} type="button" onMouseEnter={() => setHover(r.name)}
+            <button key={r.name} type="button" className="bar-row" onPointerEnter={() => setHover(r.name)}
                     onClick={() => onPick && onPick(picked === r.name ? null : r.name)}
                     title={`${r.name}: ${pct(r.fraction)}`}
                     style={{ display: 'grid', gridTemplateColumns: '120px 1fr 56px', alignItems: 'center', gap: 8,
