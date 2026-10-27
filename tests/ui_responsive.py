@@ -95,7 +95,14 @@ def check_nothing_clipped(page, dev, route):
     ok(not wide, f"nothing_clipped[{dev['name']}] {route}: {wide[:5]}")
 
 
-ROUTE_CHECKS = [check_no_horizontal_overflow, check_nothing_clipped, check_topbar_one_line, check_tap_targets]
+def check_tables_scroll_inside(page, dev, route):
+    if route not in ("/jobs", "/system") or dev["width"] > 640:
+        return
+    loose = page.evaluate("[...document.querySelectorAll('table.data')].filter(t => t.offsetParent && !t.closest('.table-wrap')).length")
+    ok(loose == 0, f"tables_scroll_inside[{dev['name']}] {route}: {loose} table(s) outside .table-wrap")
+
+
+ROUTE_CHECKS = [check_tables_scroll_inside, check_no_horizontal_overflow, check_nothing_clipped, check_topbar_one_line, check_tap_targets]
 
 
 def open_app(page, dev):
@@ -270,7 +277,49 @@ def map_tools_reachable(page, dev, job):
     ok(boxes and not small and not clash, f"map_tools_reachable[{dev['name']}]: too small {small}, overlapping {clash}")
 
 
-DEVICE_CHECKS = [overlays_fit, map_tools_reachable, sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
+def dialog_fits_small_screen(page, dev, job):
+    if dev["name"] != "360x740":
+        return
+    page.set_viewport_size({"width": 360, "height": 640})
+    try:
+        go(page, "/", job)
+        if page.locator(".sheet-handle").get_attribute("aria-expanded") != "true":
+            page.locator(".sheet-handle").tap(); page.wait_for_timeout(400)
+        page.get_by_role("checkbox", name="Minerals").tap()
+        dlg = page.get_by_role("dialog", name="Connect your NASA account")
+        dlg.wait_for(timeout=5000)
+        r = rect(page, "dialog[open]")
+        scrolls = page.evaluate("(() => { const d = document.querySelector('dialog[open]'); return d.scrollHeight > d.clientHeight && getComputedStyle(d).overflowY !== 'visible' })()")
+        btn = dlg.get_by_role("button", name="Submit")
+        btn.scroll_into_view_if_needed()
+        b = btn.bounding_box()
+        ok((r["bottom"] <= 640.5 or scrolls) and b and 0 <= b["y"] and b["y"] + b["height"] <= 640,
+           f"dialog_fits_small_screen[360x640]: dialog {r['top']:.0f}-{r['bottom']:.0f}, scrolls {scrolls}, Submit on screen {bool(b)}")
+        page.keyboard.press("Escape")
+    finally:
+        page.set_viewport_size({"width": dev["width"], "height": dev["height"]})
+
+
+ADMIN = "admin@example.com"   # ADMIN_EMAIL of the test stack: the platform stats are admin-only
+
+
+def stats_grid(page, dev, job):
+    if dev["name"] not in ("320x568", "360x740"):
+        return
+    ctx = page.context.browser.new_context(viewport={"width": dev["width"], "height": dev["height"]}, has_touch=True, is_mobile=True)
+    p2 = ctx.new_page()
+    try:
+        sign_in(p2, email=ADMIN)
+        go(p2, "/system", job)
+        p2.locator(".grid4").wait_for(timeout=10000)
+        cols = p2.evaluate("getComputedStyle(document.querySelector('.grid4')).gridTemplateColumns.split(' ').length")
+        want = 1 if dev["width"] <= 360 and dev["name"] == "320x568" else 2
+        ok(cols == want, f"stats_grid[{dev['name']}]: {cols} columns (want {want})")
+    finally:
+        ctx.close()
+
+
+DEVICE_CHECKS = [stats_grid, dialog_fits_small_screen, overlays_fit, map_tools_reachable, sheet_toggles, landscape_side_by_side, tablet_columns, desktop_unchanged,
                  touch_draw_makes_box, tiles_cover_map_after_resize]
 
 
@@ -295,9 +344,18 @@ def go(page, route, job):
 EMAIL = f"responsive-tester-with-a-long-name-{secrets.token_hex(3)}@example.com"   # long names must fit too
 
 
-def sign_in(page, retry=True):
+def hint_login(page, email):
+    """The test IdP signs in whoever login_hint names. Playwright does not route redirect hops, so add the
+    hint to the gateway's redirect to the IdP itself (the hn_oauth cookie on that response is kept)."""
+    def handle(route):
+        resp = route.fetch(max_redirects=0)
+        loc = resp.headers.get("location", "")
+        route.fulfill(response=resp, headers={**resp.headers, "location": loc + ("&" if "?" in loc else "?") + f"login_hint={email}"})
+    page.route("**/api/auth/google/login*", handle)
+
+def sign_in(page, retry=True, email=None):
     """Sign in through the test IdP, as a person would (refresh tokens rotate: every context signs in itself)."""
-    page.route("**/authorize?*", lambda r: r.continue_(url=r.request.url + f"&login_hint={EMAIL}"))
+    hint_login(page, email or EMAIL)
     throttle(4)   # login page refresh, google/login, callback, refresh after landing
     page.goto(f"{BASE}/login")
     page.get_by_role("link", name="Sign in with Google").click()
@@ -307,8 +365,8 @@ def sign_in(page, retry=True):
         if not retry:
             raise
         time.sleep(61)   # an earlier run in the same minute used up the sign-in rate limit
-        page.unroute("**/authorize?*")
-        sign_in(page, retry=False)
+        page.unroute("**/api/auth/google/login*")
+        sign_in(page, retry=False, email=email)
 
 
 def seed(browser):
